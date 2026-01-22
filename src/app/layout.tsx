@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 
 import { MediaProvider } from "@/context/MediaContext";
 import { LayoutProvider } from "@/context/LayoutContext";
+import { AuthProvider } from "@/context/AuthContext";
 
 export default function RootLayout({
   children,
@@ -28,11 +29,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <MediaProvider>
-          <LayoutProvider>
-            {children}
-          </LayoutProvider>
-        </MediaProvider>
+        <AuthProvider>
+          <MediaProvider>
+            <LayoutProvider>
+              {children}
+            </LayoutProvider>
+          </MediaProvider>
+        </AuthProvider>
       </body>
     </html>
   );

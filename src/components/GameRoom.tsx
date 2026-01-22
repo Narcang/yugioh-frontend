@@ -3,7 +3,6 @@ import React from 'react';
 import Sidebar from '@/components/Sidebar';
 import RightPanel from '@/components/RightPanel';
 import GameArea from '@/components/GameArea';
-import SettingsModal from '@/components/SettingsModal';
 import DiceModal from '@/components/DiceModal';
 
 const GameRoom: React.FC = () => {
@@ -13,7 +12,6 @@ const GameRoom: React.FC = () => {
             <GameArea />
             <RightPanel />
 
-            <SettingsModal />
             <DiceModal />
         </div>
     );

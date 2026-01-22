@@ -2,7 +2,9 @@
 import React, { useEffect, Suspense } from 'react';
 import { useLayout } from '@/context/LayoutContext';
 import GameRoom from '@/components/GameRoom';
+import LandingPage from '@/components/LandingPage';
 import Lobby from '@/components/Lobby';
+import SettingsModal from '@/components/SettingsModal';
 import { useSearchParams } from 'next/navigation';
 
 function RoomUrlHandler() {
@@ -28,7 +30,10 @@ export default function Home() {
       <Suspense fallback={null}>
         <RoomUrlHandler />
       </Suspense>
-      {appView === 'lobby' ? <Lobby /> : <GameRoom />}
+      {appView === 'landing' && <LandingPage />}
+      {appView === 'lobby' && <Lobby />}
+      {appView === 'game' && <GameRoom />}
+      <SettingsModal />
     </main>
   );
 }

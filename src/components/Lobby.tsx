@@ -3,12 +3,17 @@ import React, { useState } from 'react';
 import { useLayout } from '@/context/LayoutContext';
 
 import CreateRoomModal, { RoomData } from './CreateRoomModal';
+import AuthModal from './AuthModal';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/context/AuthContext';
 
 const Lobby: React.FC = () => {
-    const { setAppView, setCurrentRoomId } = useLayout();
+    const { setAppView, setCurrentRoomId, setIsSettingsOpen } = useLayout();
+    const { user, profile, signOut } = useAuth();
     const [joinCode, setJoinCode] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
 
     // Supabase State
     const [rooms, setRooms] = useState<any[]>([]);
@@ -26,8 +31,11 @@ const Lobby: React.FC = () => {
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            if (error) console.error('Error fetching rooms:', error);
-            else if (data) {
+            if (error) {
+                console.error('Error fetching rooms:', JSON.stringify(error, null, 2));
+                // Also alert strictly for debugging
+                console.log("Full Error Object:", error);
+            } else if (data) {
                 const mappedRooms = data.map((r: any) => ({
                     id: r.id,
                     host: r.host_name,
@@ -64,15 +72,20 @@ const Lobby: React.FC = () => {
     };
 
     const handleCreateRoom = async (data: RoomData) => {
+        if (!user) {
+            alert("Devi effettuare il login per creare una stanza!");
+            return;
+        }
         try {
-            // For now, Host is static "Player" until Auth is ready
+            const hostName = profile?.username || user.email?.split('@')[0] || 'Unknown';
             const newRoom = {
-                host_name: 'Player',
+                host_name: hostName,
                 format: data.format,
                 language: data.language,
                 is_public: data.isPublic,
                 current_players: 1,
-                max_players: 2
+                max_players: 2,
+                password: data.isPublic ? null : '123' // TODO: Add password field to modal
             };
 
             const { error } = await supabase.from('rooms').insert([newRoom]);
@@ -116,9 +129,63 @@ const Lobby: React.FC = () => {
     return (
         <div className="lobby-container">
             <div className="lobby-content">
-                <header className="lobby-header">
-                    <h1 className="game-title">Yu-Gi-Oh! Platform</h1>
-                    <p className="game-subtitle">Select your game mode</p>
+                <header className="lobby-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h1 className="game-title">Yu-Gi-Oh! Platform</h1>
+                        <p className="game-subtitle">Select your game mode</p>
+                    </div>
+
+                    <div style={{ position: 'relative' }}>
+                        {user ? (
+                            <div
+                                className="user-avatar"
+                                style={{ cursor: 'pointer', border: '2px solid #F4C430', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#333' }}
+                                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                                title={profile?.username || user.email || 'User'}
+                            >
+                                <span style={{ fontWeight: 'bold' }}>{profile?.username?.substring(0, 2).toUpperCase() || user.email?.substring(0, 2).toUpperCase()}</span>
+                            </div>
+                        ) : (
+                            <button className="primary-btn small" onClick={() => setIsAuthModalOpen(true)}>Accedi</button>
+                        )}
+
+                        {isProfileDropdownOpen && user && (
+                            <div className="dropdown-menu" style={{
+                                position: 'absolute',
+                                top: '50px',
+                                right: '0',
+                                background: '#1a1a1a',
+                                border: '1px solid #333',
+                                borderRadius: '8px',
+                                padding: '10px',
+                                zIndex: 100,
+                                minWidth: '150px',
+                                boxShadow: '0 4px 6px rgba(0,0,0,0.5)'
+                            }}>
+                                <div style={{ padding: '8px', borderBottom: '1px solid #333', marginBottom: '8px', color: '#888', fontSize: '12px' }}>
+                                    {profile?.username || user.email}
+                                </div>
+                                <button
+                                    style={{ width: '100%', textAlign: 'left', padding: '8px', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                    onClick={() => {
+                                        setIsSettingsOpen(true);
+                                        setIsProfileDropdownOpen(false);
+                                    }}
+                                >
+                                    <span>⚙️</span> Impostazioni
+                                </button>
+                                <button
+                                    style={{ width: '100%', textAlign: 'left', padding: '8px', background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                    onClick={() => {
+                                        signOut();
+                                        setIsProfileDropdownOpen(false);
+                                    }}
+                                >
+                                    <span>🚪</span> Esci
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </header>
 
                 <div className="lobby-main">
@@ -244,6 +311,8 @@ const Lobby: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
         </div>
     );
 };

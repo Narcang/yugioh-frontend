@@ -11,7 +11,7 @@ interface LayoutContextType {
     isSettingsOpen: boolean;
     autoSwitchSpotlight: boolean;
     isDiceModalOpen: boolean;
-    appView: 'lobby' | 'game';
+    appView: 'landing' | 'lobby' | 'game';
     currentRoomId: string | null;
     setLayoutMode: (mode: LayoutMode) => void;
     setSpotlightTarget: (target: SpotlightTarget) => void;
@@ -19,7 +19,7 @@ interface LayoutContextType {
     setIsSettingsOpen: (isOpen: boolean) => void;
     setAutoSwitchSpotlight: (autoSwitch: boolean) => void;
     setIsDiceModalOpen: (isOpen: boolean) => void;
-    setAppView: (view: 'lobby' | 'game') => void;
+    setAppView: (view: 'landing' | 'lobby' | 'game') => void;
     setCurrentRoomId: (id: string | null) => void;
 }
 
@@ -32,7 +32,7 @@ export const LayoutProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [autoSwitchSpotlight, setAutoSwitchSpotlight] = useState(false);
     const [isDiceModalOpen, setIsDiceModalOpen] = useState(false);
-    const [appView, setAppView] = useState<'lobby' | 'game'>('lobby');
+    const [appView, setAppView] = useState<'landing' | 'lobby' | 'game'>('landing');
     const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
     return (
