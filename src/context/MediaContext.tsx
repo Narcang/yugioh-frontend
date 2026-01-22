@@ -16,6 +16,9 @@ interface MediaContextType {
     toggleMic: () => void;
     toggleVideo: () => void;
     changeDevice: (kind: MediaDeviceKind, deviceId: string) => Promise<void>;
+    zoom: number;
+    setZoomLevel: (level: number) => Promise<void>;
+    zoomCapabilities: { min: number, max: number, step: number } | null;
 }
 
 const MediaContext = createContext<MediaContextType | undefined>(undefined);
@@ -35,6 +38,22 @@ export const MediaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const [selectedAudioInputDeviceId, setSelectedAudioInputDeviceId] = useState<string>();
     const [selectedAudioOutputDeviceId, setSelectedAudioOutputDeviceId] = useState<string>();
 
+    const [zoom, setZoom] = useState(1);
+    const [zoomCapabilities, setZoomCapabilities] = useState<{ min: number, max: number, step: number } | null>(null);
+
+    const checkCapabilities = (stream: MediaStream) => {
+        const track = stream.getVideoTracks()[0];
+        if (!track) return;
+
+        // Use 'any' to bypass TS check for 'capabilities' if needed, or typed if possible
+        const capabilities: any = track.getCapabilities();
+        if (capabilities && capabilities.zoom) {
+            setZoomCapabilities(capabilities.zoom);
+        } else {
+            setZoomCapabilities(null);
+        }
+    };
+
     useEffect(() => {
         const initStream = async () => {
             try {
@@ -44,6 +63,7 @@ export const MediaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                     audio: true
                 });
                 setLocalStream(stream);
+                checkCapabilities(stream);
                 setIsLoading(false);
                 setError(null);
             } catch (err: any) {
@@ -142,6 +162,9 @@ export const MediaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             // If we replaced one track, we might want to merge with existing other track 
             // OR just replace the whole stream for simplicity in this context
             setLocalStream(newStream);
+            if (newStream.getVideoTracks().length > 0) {
+                checkCapabilities(newStream);
+            }
 
             if (kind === 'videoinput') setSelectedVideoDeviceId(deviceId);
             if (kind === 'audioinput') setSelectedAudioInputDeviceId(deviceId);
@@ -149,6 +172,21 @@ export const MediaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         } catch (err) {
             console.error("Failed to change device:", err);
             setError("Impossibile cambiare dispositivo.");
+        }
+    };
+
+    const setZoomLevel = async (level: number) => {
+        if (!localStream) return;
+        const track = localStream.getVideoTracks()[0];
+        if (!track) return;
+
+        try {
+            await track.applyConstraints({
+                advanced: [{ zoom: level } as any]
+            });
+            setZoom(level);
+        } catch (err) {
+            console.error("Failed to set zoom:", err);
         }
     };
 
@@ -167,7 +205,10 @@ export const MediaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             selectedAudioOutputDeviceId,
             toggleMic,
             toggleVideo,
-            changeDevice
+            changeDevice,
+            zoom,
+            setZoomLevel,
+            zoomCapabilities
         }}>
             {children}
         </MediaContext.Provider>

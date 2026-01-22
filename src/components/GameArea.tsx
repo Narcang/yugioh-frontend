@@ -6,7 +6,7 @@ import PlayerOverlay from './PlayerOverlay';
 
 const GameArea: React.FC = () => {
     const { localStream, isVideoEnabled, error } = useMedia();
-    const { layoutMode, spotlightTarget, setLayoutMode, setSpotlightTarget } = useLayout();
+    const { layoutMode, spotlightTarget, setLayoutMode, setSpotlightTarget, videoFitMode } = useLayout();
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
@@ -78,7 +78,7 @@ const GameArea: React.FC = () => {
                         autoPlay
                         muted
                         playsInline
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%', objectFit: videoFitMode }}
                     />
                 ) : (
                     <div className="video-placeholder">
@@ -99,7 +99,22 @@ const GameArea: React.FC = () => {
 
             {/* Floating Controls (Mute/Hide) */}
             <div className="floating-controls">
-                <button className="icon-btn" style={{ background: 'rgba(0,0,0,0.6)' }} title="Toggle View">
+                <button
+                    className="icon-btn"
+                    style={{ background: 'rgba(0,0,0,0.6)' }}
+                    title="Schermo Intero"
+                    onClick={() => {
+                        if (!document.fullscreenElement) {
+                            document.documentElement.requestFullscreen().catch(e => {
+                                console.error(`Error attempting to enable fullscreen mode: ${e.message} (${e.name})`);
+                            });
+                        } else {
+                            if (document.exitFullscreen) {
+                                document.exitFullscreen();
+                            }
+                        }
+                    }}
+                >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /></svg>
                 </button>
             </div>

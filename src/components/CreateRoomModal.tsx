@@ -11,9 +11,10 @@ interface CreateRoomModalProps {
 export interface RoomData {
     name: string;
     format: string;
-    isPublic: boolean;
     description: string;
+    isPublic: boolean;
     language: string;
+    timeLimit: number;
 }
 
 const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCreate }) => {
@@ -22,12 +23,13 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCr
     const [language, setLanguage] = useState('ITA');
     const [isPublic, setIsPublic] = useState(true);
     const [description, setDescription] = useState('');
+    const [timeLimit, setTimeLimit] = useState(40);
 
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate({ name, format, isPublic, description, language });
+        onCreate({ name, format, isPublic, description, language, timeLimit });
         onClose();
         // Reset form
         setName('');
@@ -102,6 +104,20 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCr
                         <p className="helper-text">
                             {isPublic ? 'Chiunque può unirsi alla partita.' : 'La partita sarà accessibile solo tramite invito.'}
                         </p>
+                    </div>
+
+                    <div className="form-section">
+                        <label className="input-label">Tempo Limite (Minuti)</label>
+                        <select
+                            className="select-input"
+                            value={timeLimit}
+                            onChange={(e) => setTimeLimit(Number(e.target.value))}
+                        >
+                            <option value="0">Nessun Limite</option>
+                            <option value="20">20 Minuti</option>
+                            <option value="40">40 Minuti (Standard)</option>
+                            <option value="60">60 Minuti</option>
+                        </select>
                     </div>
 
                     <div className="form-section">

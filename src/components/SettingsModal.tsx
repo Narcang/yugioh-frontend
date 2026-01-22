@@ -4,7 +4,7 @@ import { useLayout } from '@/context/LayoutContext';
 import { useMedia } from '@/context/MediaContext';
 
 const SettingsModal: React.FC = () => {
-    const { isSettingsOpen, setIsSettingsOpen, autoSwitchSpotlight, setAutoSwitchSpotlight, setAppView } = useLayout();
+    const { isSettingsOpen, setIsSettingsOpen, autoSwitchSpotlight, setAutoSwitchSpotlight, setAppView, videoFitMode, setVideoFitMode } = useLayout();
     const {
         videoDevices,
         audioInputDevices,
@@ -12,7 +12,10 @@ const SettingsModal: React.FC = () => {
         selectedVideoDeviceId,
         selectedAudioInputDeviceId,
         selectedAudioOutputDeviceId,
-        changeDevice
+        changeDevice,
+        zoom,
+        setZoomLevel,
+        zoomCapabilities
     } = useMedia();
 
     const [view, setView] = useState<'menu' | 'input' | 'preferences'>('menu');
@@ -120,6 +123,51 @@ const SettingsModal: React.FC = () => {
                                 </select>
                             </div>
                         </div>
+
+                        <div className="group-divider" style={{ margin: '20px 0' }}></div>
+
+                        <h3 style={{ fontSize: '1rem', marginBottom: '15px', color: '#ccc' }}>Regolazioni Video</h3>
+
+                        <div className="form-group">
+                            <label style={{ marginBottom: '10px', display: 'block' }}>Inquadratura</label>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button
+                                    className={`action-btn ${videoFitMode === 'cover' ? 'primary' : 'secondary'}`}
+                                    onClick={() => setVideoFitMode('cover')}
+                                    style={{ flex: 1, padding: '8px', opacity: videoFitMode === 'cover' ? 1 : 0.6, background: videoFitMode === 'cover' ? 'var(--accent-purple)' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                >
+                                    Riempi (Cover)
+                                </button>
+                                <button
+                                    className={`action-btn ${videoFitMode === 'contain' ? 'primary' : 'secondary'}`}
+                                    onClick={() => setVideoFitMode('contain')}
+                                    style={{ flex: 1, padding: '8px', opacity: videoFitMode === 'contain' ? 1 : 0.6, background: videoFitMode === 'contain' ? 'var(--accent-purple)' : '#333', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                >
+                                    Adatta (Intera)
+                                </button>
+                            </div>
+                            <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>
+                                "Riempi" taglia i bordi per riempire lo schermo. "Adatta" mostra tutta l'immagine della camera.
+                            </p>
+                        </div>
+
+                        {zoomCapabilities && (
+                            <div className="form-group">
+                                <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    Zoom Digitale
+                                    <span>{zoom}x</span>
+                                </label>
+                                <input
+                                    type="range"
+                                    min={zoomCapabilities.min}
+                                    max={zoomCapabilities.max}
+                                    step={zoomCapabilities.step}
+                                    value={zoom}
+                                    onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+                                    style={{ width: '100%', marginTop: '10px' }}
+                                />
+                            </div>
+                        )}
 
                         <div className="modal-footer-single-btn">
                             <button className="primary-btn" onClick={handleClose}>Chiudi</button>

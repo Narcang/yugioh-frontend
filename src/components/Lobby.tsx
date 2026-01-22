@@ -4,6 +4,8 @@ import { useLayout } from '@/context/LayoutContext';
 
 import CreateRoomModal, { RoomData } from './CreateRoomModal';
 import AuthModal from './AuthModal';
+import UserAccountSettings from './UserAccountSettings';
+
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 
@@ -14,6 +16,7 @@ const Lobby: React.FC = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+    const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
 
     // Supabase State
     const [rooms, setRooms] = useState<any[]>([]);
@@ -85,7 +88,8 @@ const Lobby: React.FC = () => {
                 is_public: data.isPublic,
                 current_players: 1,
                 max_players: 2,
-                password: data.isPublic ? null : '123' // TODO: Add password field to modal
+                password: data.isPublic ? null : '123', // TODO: Add password field to modal
+                settings: { time_limit: data.timeLimit }
             };
 
             const { error } = await supabase.from('rooms').insert([newRoom]);
@@ -129,13 +133,23 @@ const Lobby: React.FC = () => {
     return (
         <div className="lobby-container">
             <div className="lobby-content">
-                <header className="lobby-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
+                <header className="lobby-header" style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto 1fr',
+                    alignItems: 'center',
+                    padding: '20px 40px'
+                }}>
+                    <div style={{ visibility: 'hidden' }}>
+                        {/* Empty left column for balance */}
+                        <button className="primary-btn small">Placeholder</button>
+                    </div>
+
+                    <div style={{ textAlign: 'center' }}>
                         <h1 className="game-title">Yu-Gi-Oh! Platform</h1>
                         <p className="game-subtitle">Select your game mode</p>
                     </div>
 
-                    <div style={{ position: 'relative' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', position: 'relative' }}>
                         {user ? (
                             <div
                                 className="user-avatar"
@@ -168,7 +182,7 @@ const Lobby: React.FC = () => {
                                 <button
                                     style={{ width: '100%', textAlign: 'left', padding: '8px', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                                     onClick={() => {
-                                        setIsSettingsOpen(true);
+                                        setIsUserSettingsOpen(true);
                                         setIsProfileDropdownOpen(false);
                                     }}
                                 >
@@ -313,6 +327,7 @@ const Lobby: React.FC = () => {
             )}
 
             <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+            <UserAccountSettings isOpen={isUserSettingsOpen} onClose={() => setIsUserSettingsOpen(false)} />
         </div>
     );
 };
