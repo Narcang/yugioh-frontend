@@ -8,9 +8,11 @@ interface GameAreaProps {
     remoteStream: MediaStream | null;
     opponentName?: string;
     selfName?: string;
+    sendLP?: (lp: number) => void;
+    latestReceivedLP?: number | null;
 }
 
-const GameArea: React.FC<GameAreaProps> = ({ remoteStream, opponentName = 'Opponent', selfName = 'Duelist' }) => {
+const GameArea: React.FC<GameAreaProps> = ({ remoteStream, opponentName = 'Opponent', selfName = 'Duelist', sendLP, latestReceivedLP }) => {
     const { localStream, isVideoEnabled, error } = useMedia();
     const { layoutMode, spotlightTarget, setLayoutMode, setSpotlightTarget, videoFitMode } = useLayout();
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -75,7 +77,10 @@ const GameArea: React.FC<GameAreaProps> = ({ remoteStream, opponentName = 'Oppon
                     </div>
                 )}
 
-                <PlayerOverlay name={opponentName} />
+                <PlayerOverlay
+                    name={opponentName}
+                    currentLP={latestReceivedLP ?? 8000} // Show synchronized LP
+                />
 
                 <div className="mute-icon-container">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
@@ -115,7 +120,11 @@ const GameArea: React.FC<GameAreaProps> = ({ remoteStream, opponentName = 'Oppon
                     </div>
                 )}
 
-                <PlayerOverlay name={selfName} isSelf />
+                <PlayerOverlay
+                    name={selfName}
+                    isSelf
+                    onLpChange={sendLP} // Pass handler
+                />
 
             </div>
 

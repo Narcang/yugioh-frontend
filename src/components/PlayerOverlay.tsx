@@ -4,17 +4,39 @@ import React, { useState, useRef, useEffect } from 'react';
 interface PlayerOverlayProps {
     name: string;
     isSelf?: boolean;
+    onLpChange?: (lp: number) => void;
+    currentLP?: number;
 }
 
-const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf }) => {
+const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf, onLpChange, currentLP }) => {
     const [lifePoints, setLifePoints] = useState(8000);
-    // Simplified Mode: Direct +/- 1000
-    // No input field needed as per user request
+    const [step, setStep] = useState<number>(1000); // Default step 1000
+    const [isHovered, setIsHovered] = useState(false);
+
+    // Sync from props (Remote updates)
+    useEffect(() => {
+        if (typeof currentLP !== 'undefined') {
+            setLifePoints(currentLP);
+        }
+    }, [currentLP]);
+
+    const handleLpChange = (delta: 'add' | 'subtract') => {
+        setLifePoints(prev => {
+            const newVal = delta === 'add' ? prev + step : Math.max(0, prev - step);
+            // Broadcast changes
+            if (onLpChange) {
+                onLpChange(newVal);
+            }
+            return newVal;
+        });
+    };
 
     return (
         <div
             className="player-overlay"
-            onClick={(e) => e.stopPropagation()} // Prevent Full Screen toggle on click
+            onClick={(e) => e.stopPropagation()} // Prevent Full Screen toggle
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
         >
             {/* Top Bar with Name and Life Points */}
             <div className="overlay-header">
@@ -24,24 +46,37 @@ const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf }) => {
                     {isSelf && (
                         <button
                             className="lp-btn"
-                            onClick={() => setLifePoints(prev => Math.max(0, prev - 1000))}
-                            title="-1000 LP"
+                            onClick={() => handleLpChange('subtract')}
+                            title={`-${step} LP`}
                         >
                             −
                         </button>
                     )}
 
-                    <div className="lp-value-container">
+                    <div className="lp-value-container" style={{ flexDirection: 'column', gap: '2px' }}>
                         <div className="lp-value">
                             {lifePoints}
                         </div>
+                        {/* Custom Step Input (Visible on Hover for Self) */}
+                        {isSelf && isHovered && (
+                            <div className="step-input-container" title="Change +/- Step">
+                                <span style={{ fontSize: '10px', color: '#888' }}>STEP:</span>
+                                <input
+                                    type="number"
+                                    className="step-input"
+                                    value={step}
+                                    onChange={(e) => setStep(Math.max(1, parseInt(e.target.value) || 0))}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {isSelf && (
                         <button
                             className="lp-btn"
-                            onClick={() => setLifePoints(prev => prev + 1000)}
-                            title="+1000 LP"
+                            onClick={() => handleLpChange('add')}
+                            title={`+${step} LP`}
                         >
                             +
                         </button>
@@ -64,6 +99,37 @@ const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf }) => {
 
             </div>
 
+            <style jsx>{`
+                .step-input-container {
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                    background: rgba(0,0,0,0.5);
+                    padding: 2px 5px;
+                    border-radius: 4px;
+                    margin-top: -5px;
+                }
+                .step-input {
+                    background: transparent;
+                    border: none;
+                    color: gold;
+                    font-size: 11px;
+                    width: 40px;
+                    text-align: center;
+                    outline: none;
+                    font-family: monospace;
+                    border-bottom: 1px solid #444;
+                }
+                .step-input:focus {
+                    border-bottom-color: gold;
+                }
+                /* Remove spinner from number input */
+                .step-input::-webkit-inner-spin-button, 
+                .step-input::-webkit-outer-spin-button { 
+                    -webkit-appearance: none; 
+                    margin: 0; 
+                }
+            `}</style>
         </div>
     );
 };

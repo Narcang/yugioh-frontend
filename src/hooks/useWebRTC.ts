@@ -20,7 +20,10 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
 
     // DATA CHANNEL REFS
     const dataChannel = useRef<RTCDataChannel | null>(null);
+
     const [latestReceivedCard, setLatestReceivedCard] = useState<any | null>(null);
+    const [latestReceivedLP, setLatestReceivedLP] = useState<number | null>(null);
+
     const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
 
     // DEBUG STATE
@@ -47,6 +50,27 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                 event: 'card-declared',
                 payload: cardData
             }).catch(err => console.error("Supabase Send error:", err));
+        }
+    };
+
+    // LP SYNC
+    const sendLP = (lp: number) => {
+        let sent = false;
+        const payload = JSON.stringify({ type: 'lp-update', data: lp });
+
+        if (dataChannel.current && dataChannel.current.readyState === 'open') {
+            try {
+                dataChannel.current.send(payload);
+                sent = true;
+            } catch (e) { console.error("DC Send LP error", e); }
+        }
+
+        if (!sent) {
+            channel.current?.send({
+                type: 'broadcast',
+                event: 'lp-update',
+                payload: lp
+            }).catch(err => console.error("Supabase Send LP error:", err));
         }
     };
 
@@ -89,6 +113,7 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                 try {
                     const parsed = JSON.parse(msg.data);
                     if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
+                    if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
                 } catch (e) { }
             };
         };
@@ -107,6 +132,9 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             .on('broadcast', { event: 'card-declared' }, ({ payload }) => {
                 console.log("Received via Supabase Fallback:", payload.name);
                 setLatestReceivedCard(payload);
+            })
+            .on('broadcast', { event: 'lp-update' }, ({ payload }) => {
+                setLatestReceivedLP(payload);
             })
             .on('broadcast', { event: 'offer' }, async ({ payload }) => {
                 try {
@@ -148,6 +176,7 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                         try {
                             const parsed = JSON.parse(msg.data);
                             if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
+                            if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
                         } catch (e) { }
                     };
                     dataChannel.current = dc;
@@ -173,5 +202,5 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         };
     }, [roomId, localStream]);
 
-    return { remoteStream, isConnected, remoteUsername, sendCard, latestReceivedCard, dataChannelState };
+    return { remoteStream, isConnected, remoteUsername, sendCard, latestReceivedCard, dataChannelState, sendLP, latestReceivedLP };
 };
