@@ -5,6 +5,7 @@ interface RightPanelProps {
     remoteStream?: MediaStream | null;
     onDeclareCard?: (card: any) => void;
     lastReceivedCard?: any | null;
+    dataChannelState?: string;
 }
 
 interface CardData {
@@ -22,7 +23,7 @@ interface SearchResult {
     image_url: string;
 }
 
-const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard }) => {
+const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard, dataChannelState }) => {
     const [activeTab, setActiveTab] = useState<'cards' | 'log'>('cards');
     const [scannedCards, setScannedCards] = useState<CardData[]>([]);
     const [zoomedCard, setZoomedCard] = useState<CardData | null>(null);
@@ -257,6 +258,7 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
                         <div className="debug-log-container" style={{ padding: '10px', fontSize: '11px', fontFamily: 'monospace', color: '#888' }}>
                             <div style={{ marginBottom: '10px', color: '#FCD34D' }}>DEBUG STATUS</div>
                             <div>Stream: {remoteStream ? "ACTIVE" : "NO STREAM"}</div>
+                            <div>DataChannel: {dataChannelState || "CLOSED"}</div>
                             <div>Sync Listener: {lastReceivedCard ? "ACTIVE" : "WAITING"}</div>
                             <div style={{ marginTop: '10px', borderTop: '1px solid #333', paddingTop: '5px' }}>EVENT LOG:</div>
                             {scannedCards.map(c => (

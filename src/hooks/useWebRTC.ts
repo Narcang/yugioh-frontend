@@ -23,14 +23,30 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
     const [latestReceivedCard, setLatestReceivedCard] = useState<any | null>(null);
     const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
 
-    // NEW SYNCHRONIZATION: Send via Data Channel
+    // DEBUG STATE
+    const [dataChannelState, setDataChannelState] = useState<string>('closed');
+
+    // NEW SYNCHRONIZATION: Send via Data Channel with Fallback
     const sendCard = (cardData: any) => {
+        let sent = false;
+        // 1. Try DataChannel
         if (dataChannel.current && dataChannel.current.readyState === 'open') {
-            console.log("Sending card via DataChannel:", cardData.name);
+            console.log("Sending via DataChannel:", cardData.name);
             const payload = JSON.stringify({ type: 'card-declared', data: cardData });
-            dataChannel.current.send(payload);
-        } else {
-            console.error("Data Channel not open. State:", dataChannel.current?.readyState);
+            try {
+                dataChannel.current.send(payload);
+                sent = true;
+            } catch (e) { console.error("DC Send error", e); }
+        }
+
+        // 2. Fallback to Supabase Broadcast
+        if (!sent) {
+            console.warn("DataChannel not ready, falling back to Supabase Broadcast...", cardData.name);
+            channel.current?.send({
+                type: 'broadcast',
+                event: 'card-declared',
+                payload: cardData
+            }).catch(err => console.error("Supabase Send error:", err));
         }
     };
 
@@ -56,9 +72,7 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         // Handle ICE candidates
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                channel.current?.send({
-                    type: 'broadcast', event: 'ice-candidate', payload: event.candidate
-                });
+                channel.current?.send({ type: 'broadcast', event: 'ice-candidate', payload: event.candidate });
             }
         };
 
@@ -66,16 +80,16 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         pc.ondatachannel = (event) => {
             console.log("Received Data Channel:", event.channel.label);
             const receiveChannel = event.channel;
-            dataChannel.current = receiveChannel; // Store it to reply if needed
+            dataChannel.current = receiveChannel;
+
+            receiveChannel.onopen = () => setDataChannelState('open');
+            receiveChannel.onclose = () => setDataChannelState('closed');
 
             receiveChannel.onmessage = (msg) => {
-                console.log("DataChannel Message:", msg.data);
                 try {
                     const parsed = JSON.parse(msg.data);
-                    if (parsed.type === 'card-declared') {
-                        setLatestReceivedCard(parsed.data);
-                    }
-                } catch (e) { console.error("Parse error", e); }
+                    if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
+                } catch (e) { }
             };
         };
 
@@ -88,6 +102,11 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                 const candidate = new RTCIceCandidate(payload);
                 if (pc.remoteDescription && pc.remoteDescription.type) await pc.addIceCandidate(candidate);
                 else iceCandidatesQueue.current.push(candidate);
+            })
+            // LISTEN FOR SUPABASE FALLBACK MESSAGES
+            .on('broadcast', { event: 'card-declared' }, ({ payload }) => {
+                console.log("Received via Supabase Fallback:", payload.name);
+                setLatestReceivedCard(payload);
             })
             .on('broadcast', { event: 'offer' }, async ({ payload }) => {
                 try {
@@ -118,12 +137,13 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                 if (payload.username) setRemoteUsername(payload.username);
                 console.log(`[Signaling] Ready received from ${theirId}`);
 
+                // Tie-Breaker Logic
                 if (!pc.currentRemoteDescription && myId < theirId) {
                     console.log("I am the offerer. Creating Data Channel...");
 
-                    // OFFERER Creates Data Channel
                     const dc = pc.createDataChannel("game-events");
-                    dc.onopen = () => console.log("DataChannel OPEN (Offerer)");
+                    dc.onopen = () => setDataChannelState('open');
+                    dc.onclose = () => setDataChannelState('closed');
                     dc.onmessage = (msg) => {
                         try {
                             const parsed = JSON.parse(msg.data);
@@ -153,5 +173,5 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         };
     }, [roomId, localStream]);
 
-    return { remoteStream, isConnected, remoteUsername, sendCard, latestReceivedCard };
+    return { remoteStream, isConnected, remoteUsername, sendCard, latestReceivedCard, dataChannelState };
 };
