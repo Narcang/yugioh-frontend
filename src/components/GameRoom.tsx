@@ -27,7 +27,7 @@ const GameRoom: React.FC = () => {
                 opponentName={remoteUsername || 'Opponent'}
                 selfName={username}
             />
-            <RightPanel />
+            <RightPanel remoteStream={remoteStream} />
 
             <DiceModal />
             <TurnNotification />
