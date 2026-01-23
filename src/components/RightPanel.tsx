@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 
 interface RightPanelProps {
     remoteStream?: MediaStream | null;
+    onDeclareCard?: (card: any) => void;
+    lastReceivedCard?: any | null;
 }
 
 interface CardData {
@@ -20,10 +22,26 @@ interface SearchResult {
     image_url: string;
 }
 
-const RightPanel: React.FC<RightPanelProps> = ({ remoteStream }) => {
+const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard }) => {
     const [activeTab, setActiveTab] = useState<'cards' | 'log'>('cards');
     const [scannedCards, setScannedCards] = useState<CardData[]>([]);
     const [zoomedCard, setZoomedCard] = useState<CardData | null>(null);
+
+    // Sync: Listen for incoming cards
+    useEffect(() => {
+        if (lastReceivedCard) {
+            // Check if we already have this card (by scanning ID or similar logic)
+            // But usually we just add it because it's a new event
+            setScannedCards(prev => {
+                // Prevent duplicate if same data comes twice in ms
+                if (prev.length > 0 && prev[0].timestamp === lastReceivedCard.timestamp && prev[0].name === lastReceivedCard.name) {
+                    return prev;
+                }
+                return [lastReceivedCard, ...prev];
+            });
+            setActiveTab('cards');
+        }
+    }, [lastReceivedCard]);
 
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
@@ -56,30 +74,47 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream }) => {
 
     // Handle "Declare" (Clicking a result)
     const handleDeclareCard = async (result: SearchResult) => {
+        const tempId = Math.random().toString(36).substr(2, 9);
+        const timestamp = Date.now();
+
+        // Initial Object (Optimistic)
         const newCard: CardData = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: tempId,
             name: result.name,
-            desc: "Caricamento dettagli...", // Placeholder
+            desc: "Caricamento dettagli...",
             image_url: result.image_url,
             image_url_small: result.image_url,
-            timestamp: Date.now()
+            timestamp: timestamp
         };
 
-        // Add to local history
+        // 1. Show immediately locally
         setScannedCards(prev => [newCard, ...prev]);
-        setSearchQuery(''); // Clear search
+        setSearchQuery('');
         setSearchResults([]);
 
-        // Fetch description asynchronously to update it
+        // 2. Fetch Details
+        let finalCard = { ...newCard };
         try {
             const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(result.name)}`);
             const data = await res.json();
             if (data.data && data.data.length > 0) {
+                finalCard.desc = data.data[0].desc;
+
+                // 3. Update Local State with full details
                 setScannedCards(prev => prev.map(c =>
-                    c.id === newCard.id ? { ...c, desc: data.data[0].desc } : c
+                    c.id === tempId ? { ...c, desc: finalCard.desc } : c
                 ));
             }
-        } catch (e) { console.error("Desc fetch failed", e); }
+        } catch (e) {
+            console.error("Desc fetch failed", e);
+            finalCard.desc = "Errore caricamento effetto.";
+        }
+
+        // 4. BROADCAST the FULL card to opponent (After fetch)
+        if (onDeclareCard) {
+            console.log("Broadcasting card:", finalCard.name);
+            onDeclareCard(finalCard);
+        }
     };
 
     return (
