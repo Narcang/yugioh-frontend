@@ -10,7 +10,12 @@ interface PlayerOverlayProps {
 
 const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf, onLpChange, currentLP }) => {
     const [lifePoints, setLifePoints] = useState(8000);
-    const [step, setStep] = useState<number>(1000); // Default step 1000
+    // Use string for input to allow full editing (empty string, etc.)
+    const [stepInput, setStepInput] = useState<string>('1000');
+
+    // Derived numeric value for logic
+    const stepValue = parseInt(stepInput) || 0;
+
     const [isHovered, setIsHovered] = useState(false);
 
     // Sync from props (Remote updates)
@@ -21,14 +26,41 @@ const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf, onLpChange,
     }, [currentLP]);
 
     const handleLpChange = (delta: 'add' | 'subtract') => {
+        if (stepValue <= 0) return;
+
         setLifePoints(prev => {
-            const newVal = delta === 'add' ? prev + step : Math.max(0, prev - step);
+            const newVal = delta === 'add' ? prev + stepValue : Math.max(0, prev - stepValue);
             // Broadcast changes
             if (onLpChange) {
                 onLpChange(newVal);
             }
             return newVal;
         });
+    };
+
+    const handleHalveLP = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setLifePoints(prev => {
+            const newVal = Math.ceil(prev / 2);
+            if (onLpChange) onLpChange(newVal);
+            return newVal;
+        });
+    };
+
+    const handleStepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        // Allow digits only or empty
+        if (val === '' || /^\d+$/.test(val)) {
+            setStepInput(val);
+        }
+    };
+
+    const handleStepBlur = () => {
+        // If empty or 0, default to something or keep 0? User wanted flexibility.
+        // Let's just ensures it's clean formatted if needed, but '0' is fine if they want to type 500 later.
+        if (stepInput === '') {
+            setStepInput('0');
+        }
     };
 
     return (
@@ -47,7 +79,7 @@ const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf, onLpChange,
                         <button
                             className="lp-btn"
                             onClick={() => handleLpChange('subtract')}
-                            title={`-${step} LP`}
+                            title={`-${stepInput || 0} LP`}
                         >
                             −
                         </button>
@@ -59,15 +91,26 @@ const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf, onLpChange,
                         </div>
                         {/* Custom Step Input (Visible on Hover for Self) */}
                         {isSelf && isHovered && (
-                            <div className="step-input-container" title="Change +/- Step">
-                                <span style={{ fontSize: '10px', color: '#888' }}>STEP:</span>
-                                <input
-                                    type="number"
-                                    className="step-input"
-                                    value={step}
-                                    onChange={(e) => setStep(Math.max(1, parseInt(e.target.value) || 0))}
-                                    onClick={(e) => e.stopPropagation()}
-                                />
+                            <div className="controls-row">
+                                <div className="step-input-container" title="Change +/- Step">
+                                    <span style={{ fontSize: '10px', color: '#888', fontWeight: 600 }}>STEP</span>
+                                    <input
+                                        type="text"
+                                        className="step-input"
+                                        value={stepInput}
+                                        onChange={handleStepChange}
+                                        onBlur={handleStepBlur}
+                                        onClick={(e) => e.stopPropagation()}
+                                        placeholder="Amount"
+                                    />
+                                </div>
+                                <button
+                                    className="halve-btn"
+                                    onClick={handleHalveLP}
+                                    title="Halve Life Points (½)"
+                                >
+                                    ½
+                                </button>
                             </div>
                         )}
                     </div>
@@ -76,7 +119,7 @@ const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf, onLpChange,
                         <button
                             className="lp-btn"
                             onClick={() => handleLpChange('add')}
-                            title={`+${step} LP`}
+                            title={`+${stepInput || 0} LP`}
                         >
                             +
                         </button>
@@ -100,34 +143,69 @@ const PlayerOverlay: React.FC<PlayerOverlayProps> = ({ name, isSelf, onLpChange,
             </div>
 
             <style jsx>{`
+                .controls-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    margin-top: -4px;
+                    animation: fadeIn 0.15s ease-out;
+                }
                 .step-input-container {
                     display: flex;
                     align-items: center;
-                    gap: 5px;
-                    background: rgba(0,0,0,0.5);
-                    padding: 2px 5px;
-                    border-radius: 4px;
-                    margin-top: -5px;
+                    gap: 6px;
+                    background: rgba(0,0,0,0.6);
+                    padding: 3px 8px;
+                    border-radius: 12px;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    transition: border-color 0.2s;
+                }
+                .step-input-container:hover {
+                    border-color: rgba(255, 255, 255, 0.3);
                 }
                 .step-input {
                     background: transparent;
                     border: none;
-                    color: gold;
-                    font-size: 11px;
-                    width: 40px;
+                    color: #fff;
+                    font-size: 12px;
+                    width: 45px;
                     text-align: center;
                     outline: none;
-                    font-family: monospace;
-                    border-bottom: 1px solid #444;
+                    font-family: 'Inter', sans-serif;
+                    font-weight: 500;
                 }
                 .step-input:focus {
-                    border-bottom-color: gold;
+                    color: #F0C75E; /* Sand Color */
                 }
-                /* Remove spinner from number input */
-                .step-input::-webkit-inner-spin-button, 
-                .step-input::-webkit-outer-spin-button { 
-                    -webkit-appearance: none; 
-                    margin: 0; 
+                .step-input::placeholder {
+                    color: #555;
+                }
+                
+                /* Halve Button */
+                .halve-btn {
+                    background: rgba(0,0,0,0.6);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: #ccc;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    font-size: 10px;
+                    font-weight: bold;
+                    transition: all 0.2s;
+                }
+                .halve-btn:hover {
+                    background: rgba(240, 199, 94, 0.2); /* Sand Tint */
+                    color: #F0C75E;
+                    border-color: #F0C75E;
+                }
+
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(-2px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
             `}</style>
         </div>
