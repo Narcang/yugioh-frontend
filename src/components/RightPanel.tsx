@@ -17,7 +17,7 @@ interface CardData {
 }
 
 interface SearchResult {
-    id: string;
+    id: string; // YGO ID
     name: string;
     image_url: string;
 }
@@ -81,7 +81,7 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
         const newCard: CardData = {
             id: tempId,
             name: result.name,
-            desc: "Caricamento dettagli...",
+            desc: "Caricamento effetti...",
             image_url: result.image_url,
             image_url_small: result.image_url,
             timestamp: timestamp
@@ -92,25 +92,59 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
         setSearchQuery('');
         setSearchResults([]);
 
-        // 2. Fetch Details
+        // 2. Fetch Details (Robust Strategy via ID)
         let finalCard = { ...newCard };
+
+        const fetchDetails = async (lang?: string) => {
+            const langParam = lang ? `&language=${lang}` : '';
+            // Use ID as primary key - much safer than Name for non-English cards
+            // result.id comes from our Python server which gets it from YGOProDeck DB
+            const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${result.id}${langParam}`);
+            if (!res.ok) throw new Error("API Error");
+            return await res.json();
+        };
+
         try {
-            const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(result.name)}`);
-            const data = await res.json();
-            if (data.data && data.data.length > 0) {
+            let data;
+            // A. Try Italian first
+            try {
+                data = await fetchDetails('it');
+            } catch {
+                console.warn("IT fetch warning, retrying EN...");
+            }
+
+            // B. Fallback to English if Italian failed or didn't return data
+            if (!data || !data.data) {
+                try {
+                    data = await fetchDetails(); // No lang = English
+                } catch (e) {
+                    console.error("EN fetch failed too", e);
+                }
+            }
+
+            if (data && data.data && data.data.length > 0) {
                 finalCard.desc = data.data[0].desc;
 
                 // 3. Update Local State with full details
                 setScannedCards(prev => prev.map(c =>
                     c.id === tempId ? { ...c, desc: finalCard.desc } : c
                 ));
+            } else {
+                finalCard.desc = "Nessun effetto disponibile.";
+                setScannedCards(prev => prev.map(c =>
+                    c.id === tempId ? { ...c, desc: finalCard.desc } : c
+                ));
             }
         } catch (e) {
-            console.error("Desc fetch failed", e);
-            finalCard.desc = "Errore caricamento effetto.";
+            console.error("Desc fetch fatal error", e);
+            finalCard.desc = "Errore di connessione. Impossibile scaricare l'effetto.";
+            // Update UI to show error
+            setScannedCards(prev => prev.map(c =>
+                c.id === tempId ? { ...c, desc: finalCard.desc } : c
+            ));
         }
 
-        // 4. BROADCAST the FULL card to opponent (After fetch)
+        // 4. BROADCAST the FULL card to opponent (After fetch attempt)
         if (onDeclareCard) {
             console.log("Broadcasting card:", finalCard.name);
             onDeclareCard(finalCard);
