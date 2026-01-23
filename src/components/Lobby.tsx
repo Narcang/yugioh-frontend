@@ -29,25 +29,45 @@ const Lobby: React.FC = () => {
     // Fetch Rooms & Subscribe to Realtime
     React.useEffect(() => {
         const fetchRooms = async () => {
-            const { data, error } = await supabase
+            // 1. Fetch Rooms normally
+            const { data: roomsData, error: roomsError } = await supabase
                 .from('rooms')
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            if (error) {
-                console.error('Error fetching rooms:', JSON.stringify(error, null, 2));
-                // Also alert strictly for debugging
-                console.log("Full Error Object:", error);
-            } else if (data) {
-                const mappedRooms = data.map((r: any) => ({
+            if (roomsError) {
+                console.error('Error fetching rooms:', JSON.stringify(roomsError, null, 2));
+            } else if (roomsData) {
+                // 2. Extract unique host IDs
+                const hostIds = Array.from(new Set(roomsData.map((r: any) => r.host_id).filter(Boolean)));
+
+                // 3. Fetch profiles for these hosts
+                let profilesMap: Record<string, string> = {};
+                if (hostIds.length > 0) {
+                    const { data: profilesData } = await supabase
+                        .from('profiles')
+                        .select('id, username')
+                        .in('id', hostIds);
+
+                    if (profilesData) {
+                        profilesData.forEach((p: any) => {
+                            profilesMap[p.id] = p.username;
+                        });
+                    }
+                }
+
+                // 4. Map rooms using the fetched profiles
+                const mappedRooms = roomsData.map((r: any) => ({
                     id: r.id,
-                    host: r.host_name,
+                    // Use username from profilesMap if found, else fallback to room.host_name
+                    host: profilesMap[r.host_id] || r.host_name,
                     format: r.format,
                     language: r.language,
                     currentPlayers: r.current_players,
                     maxPlayers: r.max_players,
                     isPublic: r.is_public,
-                    password: r.password
+                    password: r.password,
+                    hostId: r.host_id
                 }));
                 setRooms(mappedRooms);
             }
@@ -67,10 +87,26 @@ const Lobby: React.FC = () => {
         };
     }, []);
 
-    const handleJoinGame = () => {
-        // In a real app, validation would happen here
-        // Set a mock ID if none provided
-        setCurrentRoomId(joinCode || 'mock-room-id');
+    const handleJoinGame = async (roomToJoin?: any) => {
+        const targetRoomId = roomToJoin?.id || joinCode;
+        if (!targetRoomId) return;
+
+        // In a real app we'd check if full logic on server or with RLS, but here we optimistically update.
+        if (roomToJoin) {
+            // Fix: If user is the host, DO NOT increment player count
+            const isHost = user && user.id === roomToJoin.hostId;
+
+            if (!isHost) {
+                const { error } = await supabase
+                    .from('rooms')
+                    .update({ current_players: Math.min(roomToJoin.currentPlayers + 1, roomToJoin.maxPlayers) })
+                    .eq('id', targetRoomId);
+
+                if (error) console.error("Error updating player count:", error);
+            }
+        }
+
+        setCurrentRoomId(targetRoomId);
         setAppView('game');
     };
 
@@ -80,8 +116,11 @@ const Lobby: React.FC = () => {
             return;
         }
         try {
-            const hostName = profile?.username || user.email?.split('@')[0] || 'Unknown';
+            // Prioritize username from profile
+            const hostName = profile?.username || user.email?.split('@')[0] || 'Duelist';
+
             const newRoom = {
+                host_id: user.id, // Explicitly set host_id
                 host_name: hostName,
                 format: data.format,
                 language: data.language,
@@ -89,16 +128,44 @@ const Lobby: React.FC = () => {
                 current_players: 1,
                 max_players: 2,
                 password: data.isPublic ? null : '123', // TODO: Add password field to modal
-                settings: { time_limit: data.timeLimit }
+                settings: {}
             };
 
-            const { error } = await supabase.from('rooms').insert([newRoom]);
+            console.log("Attempting to create room with:", newRoom);
+
+            const { data: createdRoom, error } = await supabase.from('rooms').insert([newRoom]).select().single();
+
+            if (error) {
+                console.error("Supabase Insert Error:", JSON.stringify(error, null, 2));
+                throw error;
+            }
+
+            setIsCreateModalOpen(false);
+            // Auto Join properly
+            setCurrentRoomId(createdRoom.id);
+            setAppView('game');
+
+        } catch (err: any) {
+            console.error("Error creating room (Catch):", JSON.stringify(err, null, 2));
+            alert(`Errore nella creazione della stanza: ${err.message || JSON.stringify(err)}`);
+        }
+    };
+
+    const handleDeleteRoom = async (e: React.MouseEvent, roomId: string) => {
+        e.stopPropagation();
+        if (!confirm("Are you sure you want to delete this room?")) return;
+
+        try {
+            const { error } = await supabase
+                .from('rooms')
+                .delete()
+                .eq('id', roomId);
 
             if (error) throw error;
-            setIsCreateModalOpen(false);
+            // Room list will auto-update via subscription
         } catch (err) {
-            console.error("Error creating room:", err);
-            alert("Errore nella creazione della stanza");
+            console.error("Error deleting room:", err);
+            alert("Error deleting room");
         }
     };
 
@@ -114,16 +181,14 @@ const Lobby: React.FC = () => {
             setIsPasswordPromptOpen(true);
         } else {
             // Join immediately
-            setCurrentRoomId(room.id);
-            setAppView('game');
+            handleJoinGame(room);
         }
     };
 
     const handlePasswordSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (selectedRoom && passwordInput === selectedRoom.password) {
-            setCurrentRoomId(selectedRoom.id);
-            setAppView('game');
+            handleJoinGame(selectedRoom);
             setIsPasswordPromptOpen(false);
         } else {
             alert("Password non corretta!");
@@ -239,7 +304,7 @@ const Lobby: React.FC = () => {
                                 onChange={(e) => setJoinCode(e.target.value)}
                                 className="lobby-input"
                             />
-                            <button className="primary-btn small" onClick={handleJoinGame}>Join</button>
+                            <button className="primary-btn small" onClick={() => handleJoinGame()}>Join</button>
                         </div>
 
                         <div className="room-list">

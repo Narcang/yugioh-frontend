@@ -41,6 +41,25 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 });
 
                 if (error) throw error;
+
+                if (data.user) {
+                    // Explicitly create/update profile
+                    const { error: profileError } = await supabase
+                        .from('profiles')
+                        .upsert({
+                            id: data.user.id,
+                            username: username,
+                            full_name: fullName,
+                            updated_at: new Date().toISOString(),
+                        });
+
+                    if (profileError) {
+                        console.error("Error creating profile:", profileError);
+                        // We don't block the user, but we log it.
+                    }
+                }
+
+                if (error) throw error;
                 // If email confirmation is required, Supabase won't sign in immediately.
                 // Assuming default "Confirm Email" is OFF for this demo, or we notify user.
                 alert("Registrazione completata! Controlla la tua email per confermare (se richiesto).");

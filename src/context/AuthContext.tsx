@@ -56,6 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchProfile = async (userId: string) => {
         try {
+            console.log("Fetching profile for:", userId);
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -64,8 +65,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (error) {
                 console.error('Error fetching profile:', error);
+
+                // Self-healing: If profile missing (PGRST116), try to create it from user metadata
+                if (error.code === 'PGRST116') {
+                    console.log("Profile missing, attempting auto-creation...");
+                    const userMeta = (await supabase.auth.getUser()).data.user?.user_metadata;
+                    const username = userMeta?.username || userMeta?.email?.split('@')[0] || 'Duelist';
+
+                    const { data: newProfile, error: createError } = await supabase
+                        .from('profiles')
+                        .insert([{
+                            id: userId,
+                            username: username,
+                            full_name: userMeta?.full_name || '',
+                            updated_at: new Date().toISOString()
+                        }])
+                        .select()
+                        .single();
+
+                    if (createError) {
+                        console.error("Auto-creation failed:", createError);
+                    } else {
+                        console.log("Auto-created profile:", newProfile);
+                        setProfile(newProfile);
+                    }
+                }
+
             } else {
-                setProfile(data);
+                console.log("Profile loaded:", data);
+
+                // Self-healing: If profile exists but username is NULL/Empty
+                if (!data.username) {
+                    console.log("Profile exists but username is empty. Repairing...");
+                    const userMeta = (await supabase.auth.getUser()).data.user?.user_metadata;
+                    const emailName = (await supabase.auth.getUser()).data.user?.email?.split('@')[0];
+                    const defaultUsername = userMeta?.username || emailName || 'Duelist';
+
+                    const { data: updatedProfile, error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ username: defaultUsername })
+                        .eq('id', userId)
+                        .select()
+                        .single();
+
+                    if (!updateError && updatedProfile) {
+                        console.log("Repaired profile:", updatedProfile);
+                        setProfile(updatedProfile);
+                    } else {
+                        setProfile(data);
+                    }
+                } else {
+                    setProfile(data);
+                }
             }
         } catch (err) {
             console.error('Unexpected error fetching profile:', err);

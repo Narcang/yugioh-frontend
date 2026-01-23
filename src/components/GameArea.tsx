@@ -4,16 +4,29 @@ import { useMedia } from '@/context/MediaContext';
 import { useLayout } from '@/context/LayoutContext';
 import PlayerOverlay from './PlayerOverlay';
 
-const GameArea: React.FC = () => {
+interface GameAreaProps {
+    remoteStream: MediaStream | null;
+    opponentName?: string;
+    selfName?: string;
+}
+
+const GameArea: React.FC<GameAreaProps> = ({ remoteStream, opponentName = 'Opponent', selfName = 'Duelist' }) => {
     const { localStream, isVideoEnabled, error } = useMedia();
     const { layoutMode, spotlightTarget, setLayoutMode, setSpotlightTarget, videoFitMode } = useLayout();
     const videoRef = useRef<HTMLVideoElement>(null);
+    const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
         if (videoRef.current && localStream) {
             videoRef.current.srcObject = localStream;
         }
     }, [localStream, isVideoEnabled]);
+
+    useEffect(() => {
+        if (remoteVideoRef.current && remoteStream) {
+            remoteVideoRef.current.srcObject = remoteStream;
+        }
+    }, [remoteStream]);
 
     const handlePlayerClick = (clickedPlayer: 'self' | 'opponent') => {
         // If click on a player, set spotlight to them
@@ -47,13 +60,22 @@ const GameArea: React.FC = () => {
                 onClick={() => handlePlayerClick('opponent')}
                 style={{ cursor: 'pointer' }}
             >
-                {/* Placeholder for Video Feed */}
-                <div className="video-placeholder">
-                    <p style={{ color: 'var(--text-muted)' }}>Waiting for opponent...</p>
-                    <div style={{ width: '30px', height: '30px', border: '2px solid var(--text-muted)', borderTopColor: 'transparent', borderRadius: '50%', margin: '10px auto', animation: 'spin 1s linear infinite' }}></div>
-                </div>
+                {/* Video Feed */}
+                {remoteStream ? (
+                    <video
+                        ref={remoteVideoRef}
+                        autoPlay
+                        playsInline
+                        style={{ width: '100%', height: '100%', objectFit: videoFitMode }}
+                    />
+                ) : (
+                    <div className="video-placeholder">
+                        <p style={{ color: 'var(--text-muted)' }}>Waiting for {opponentName}...</p>
+                        <div style={{ width: '30px', height: '30px', border: '2px solid var(--text-muted)', borderTopColor: 'transparent', borderRadius: '50%', margin: '10px auto', animation: 'spin 1s linear infinite' }}></div>
+                    </div>
+                )}
 
-                <PlayerOverlay name="Opponent" />
+                <PlayerOverlay name={opponentName} />
 
                 <div className="mute-icon-container">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
@@ -93,7 +115,7 @@ const GameArea: React.FC = () => {
                     </div>
                 )}
 
-                <PlayerOverlay name="Axelfadeout" isSelf />
+                <PlayerOverlay name={selfName} isSelf />
 
             </div>
 

@@ -24,11 +24,7 @@ const Sidebar: React.FC = () => {
                 <div className="icon-btn logo-btn">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8.5l-2.5 1.25L12 11zm0 2.5l-5-2.5-5 2.5L12 22l10-8.5-5-2.5-5 2.5z" /></svg>
                 </div>
-                {timeLimit > 0 && (
-                    <div style={{ fontSize: '12px', color: selfTimeLeft < 300 ? '#EF4444' : '#fff', fontWeight: 'bold', marginTop: '4px', textAlign: 'center' }}>
-                        {Math.floor(selfTimeLeft / 60)}:{String(selfTimeLeft % 60).padStart(2, '0')}
-                    </div>
-                )}
+
             </div>
 
             {/* 1. Passa il turno */}

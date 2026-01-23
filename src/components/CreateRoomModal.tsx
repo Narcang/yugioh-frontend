@@ -14,7 +14,7 @@ export interface RoomData {
     description: string;
     isPublic: boolean;
     language: string;
-    timeLimit: number;
+
 }
 
 const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCreate }) => {
@@ -23,13 +23,14 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCr
     const [language, setLanguage] = useState('ITA');
     const [isPublic, setIsPublic] = useState(true);
     const [description, setDescription] = useState('');
-    const [timeLimit, setTimeLimit] = useState(40);
+
+
 
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate({ name, format, isPublic, description, language, timeLimit });
+        onCreate({ name, format, isPublic, description, language });
         onClose();
         // Reset form
         setName('');
@@ -106,19 +107,7 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCr
                         </p>
                     </div>
 
-                    <div className="form-section">
-                        <label className="input-label">Tempo Limite (Minuti)</label>
-                        <select
-                            className="select-input"
-                            value={timeLimit}
-                            onChange={(e) => setTimeLimit(Number(e.target.value))}
-                        >
-                            <option value="0">Nessun Limite</option>
-                            <option value="20">20 Minuti</option>
-                            <option value="40">40 Minuti (Standard)</option>
-                            <option value="60">60 Minuti</option>
-                        </select>
-                    </div>
+
 
                     <div className="form-section">
                         <label className="input-label">Descrizione (Facoltativa)</label>

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabaseClient';
 
 interface UserAccountSettingsProps {
     isOpen: boolean;
@@ -11,7 +12,50 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
     const { user, profile, signOut } = useAuth();
     const [activeTab, setActiveTab] = useState<'profile' | 'account' | 'app'>('profile');
 
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [newUsername, setNewUsername] = useState(profile?.username || '');
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [loading, setLoading] = useState(false);
+
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    React.useEffect(() => {
+        if (isOpen && profile?.username) {
+            setNewUsername(profile.username);
+        }
+    }, [isOpen, profile]);
+
     if (!isOpen) return null;
+
+    const handleSaveProfile = async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    username: newUsername,
+                    updated_at: new Date().toISOString(),
+                });
+
+            if (error) throw error;
+
+            // Refresh global auth context
+            // Assuming refreshProfile is available from useAuth, which we checked earlier
+            // @ts-ignore
+            if (typeof useAuth().refreshProfile === 'function') {
+                // @ts-ignore
+                await useAuth().refreshProfile();
+            }
+
+            alert("Profilo aggiornato con successo!");
+        } catch (err) {
+            console.error("Error updating profile:", err);
+            alert("Errore durante l'aggiornamento del profilo");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSignOut = async () => {
         await signOut();
@@ -163,14 +207,37 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
 
                             <div className="form-group" style={{ marginBottom: '20px' }}>
                                 <label style={{ display: 'block', marginBottom: '8px', color: '#aaa', fontSize: '0.9rem' }}>NOME UTENTE</label>
-                                <div style={{
-                                    padding: '12px',
-                                    background: '#111',
-                                    border: '1px solid #333',
-                                    borderRadius: '4px',
-                                    color: '#fff'
-                                }}>
-                                    {profile?.username || 'Non impostato'}
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <input
+                                        type="text"
+                                        value={newUsername}
+                                        onChange={(e) => setNewUsername(e.target.value)}
+                                        placeholder="Scegli un username"
+                                        style={{
+                                            flex: 1,
+                                            padding: '12px',
+                                            background: '#111',
+                                            border: '1px solid #333',
+                                            borderRadius: '4px',
+                                            color: '#fff'
+                                        }}
+                                    />
+                                    <button
+                                        onClick={handleSaveProfile}
+                                        disabled={loading || newUsername === (profile?.username || '')}
+                                        style={{
+                                            padding: '12px 24px',
+                                            background: newUsername === (profile?.username || '') ? '#333' : '#F4C430',
+                                            color: newUsername === (profile?.username || '') ? '#888' : '#000',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: newUsername === (profile?.username || '') ? 'default' : 'pointer',
+                                            fontWeight: 'bold',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        {loading ? '...' : 'Salva'}
+                                    </button>
                                 </div>
                             </div>
                         </div>

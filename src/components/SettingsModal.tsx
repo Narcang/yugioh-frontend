@@ -2,9 +2,11 @@
 import React, { useState } from 'react';
 import { useLayout } from '@/context/LayoutContext';
 import { useMedia } from '@/context/MediaContext';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/context/AuthContext';
 
 const SettingsModal: React.FC = () => {
-    const { isSettingsOpen, setIsSettingsOpen, autoSwitchSpotlight, setAutoSwitchSpotlight, setAppView, videoFitMode, setVideoFitMode } = useLayout();
+    const { isSettingsOpen, setIsSettingsOpen, autoSwitchSpotlight, setAutoSwitchSpotlight, setAppView, videoFitMode, setVideoFitMode, currentRoomId, setCurrentRoomId } = useLayout();
     const {
         videoDevices,
         audioInputDevices,
@@ -19,6 +21,18 @@ const SettingsModal: React.FC = () => {
     } = useMedia();
 
     const [view, setView] = useState<'menu' | 'input' | 'preferences'>('menu');
+    const { user } = useAuth();
+    const [hostId, setHostId] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        const fetchHostString = async () => {
+            if (currentRoomId) {
+                const { data } = await supabase.from('rooms').select('host_id').eq('id', currentRoomId).single();
+                if (data) setHostId(data.host_id);
+            }
+        };
+        fetchHostString();
+    }, [currentRoomId]);
 
     if (!isSettingsOpen) return null;
 
@@ -27,9 +41,45 @@ const SettingsModal: React.FC = () => {
         setView('menu'); // Reset view on close
     };
 
-    const handleLeaveGame = () => {
+    const handleLeaveGame = async () => {
+        if (currentRoomId) {
+            // Decrement player count on leave
+            // Note: We use rpc or simplistic decrement. Here optimistic simplistic.
+            const { error } = await supabase.rpc('decrement_room_players', { room_id: currentRoomId });
+            if (error) {
+                // Fallback if RPC doesn't exist (likely doesn't), do manual fetch-update
+                const { data: room } = await supabase.from('rooms').select('current_players').eq('id', currentRoomId).single();
+                if (room && room.current_players > 0) {
+                    await supabase.from('rooms').update({ current_players: room.current_players - 1 }).eq('id', currentRoomId);
+                }
+            }
+        }
         setIsSettingsOpen(false);
+        setCurrentRoomId(null);
         setAppView('lobby');
+    };
+
+
+
+    const handleCloseMatch = async () => {
+        if (!confirm("Sei sicuro di voler chiudere la partita? La stanza verrà eliminata per tutti.")) return;
+
+        setIsSettingsOpen(false);
+        try {
+            if (currentRoomId) {
+                const { error } = await supabase.from('rooms').delete().eq('id', currentRoomId);
+                if (error) {
+                    console.error("Delete Error:", error);
+                    alert("Errore eliminazione stanza: " + error.message);
+                    return;
+                }
+            }
+            setCurrentRoomId(null);
+            setAppView('lobby');
+        } catch (error) {
+            console.error("Error closing match:", error);
+            alert("Errore durante la chiusura della partita");
+        }
     };
 
     // Groups based on the screenshot structure
@@ -48,9 +98,10 @@ const SettingsModal: React.FC = () => {
             { label: "Gestisci giocatori", action: () => console.log("Gestisci giocatori") },
             { label: "Rendi casuale l'ordine dei giocatori", action: () => console.log("Rendi casuale l'ordine") },
         ],
-        [
-            { label: "Chiudi partita", action: () => console.log("Chiudi partita") },
-        ]
+        // Show "Chiudi partita" ONLY if user is Host
+        ...(user && hostId && user.id === hostId ? [[
+            { label: "Chiudi partita", action: handleCloseMatch },
+        ]] : [])
     ];
 
     return (
