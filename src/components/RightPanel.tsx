@@ -184,6 +184,11 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
                                     <img src={scannedCards[0].image_url} alt={scannedCards[0].name} />
                                     <div className="card-name-overlay">{scannedCards[0].name}</div>
                                 </div>
+
+                                {/* INLINE DESCRIPTION */}
+                                <div className="active-card-desc">
+                                    {scannedCards[0].desc}
+                                </div>
                             </div>
                         )}
 
@@ -239,6 +244,20 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
             )}
 
             <style jsx>{`
+                .active-card-desc {
+                    padding: 10px;
+                    font-size: 13px;
+                    color: #ddd;
+                    background: #222;
+                    border: 1px solid #333;
+                    border-radius: 4px;
+                    max-height: 200px;
+                    overflow-y: auto;
+                    white-space: pre-wrap;
+                    margin-top: 10px;
+                    line-height: 1.4;
+                    box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+                }
                 .search-section {
                     padding: 10px;
                     border-bottom: 1px solid var(--border-color);
@@ -315,8 +334,9 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
                     font-weight: bold;
                 }
                 .card-display-large {
-                    width: 60%;
-                    margin: 0 auto; /* Center it */
+                    width: 100%;
+                    max-width: 180px; /* STRICT LIMIT */
+                    margin: 0 auto;
                     aspect-ratio: 0.65;
                     border-radius: 6px;
                     overflow: hidden;
