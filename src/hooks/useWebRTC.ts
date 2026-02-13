@@ -6,6 +6,10 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 const ICE_SERVERS = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
         { urls: 'stun:global.stun.twilio.com:3478' }
     ]
 };
@@ -158,8 +162,13 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         };
 
         pc.oniceconnectionstatechange = () => {
-            addLog(`ICE Connection State: ${pc.iceConnectionState}`);
-            setIceConnectionState(pc.iceConnectionState);
+            const state = pc.iceConnectionState;
+            addLog(`ICE Connection State: ${state}`);
+            setIceConnectionState(state);
+
+            if (state === 'failed' || state === 'disconnected') {
+                addLog("ICE connection lost. Consider manual reconnect.");
+            }
         };
 
         pc.onconnectionstatechange = () => {

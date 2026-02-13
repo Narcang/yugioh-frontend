@@ -9,6 +9,7 @@ interface RightPanelProps {
     iceConnectionState?: string;
     connectionLogs?: string[];
     sendPing?: () => void;
+    reconnect?: () => void;
 }
 
 interface CardData {
@@ -30,7 +31,7 @@ interface SearchResult {
     text?: string; // For One Piece
 }
 
-const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard, dataChannelState, iceConnectionState, connectionLogs, sendPing }) => {
+const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard, dataChannelState, iceConnectionState, connectionLogs, sendPing, reconnect }) => {
     const { gameType, currentRoomId } = useLayout();
 
     // DEBUG: Log gameType on mount and changes
