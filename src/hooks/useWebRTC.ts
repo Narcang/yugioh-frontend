@@ -118,21 +118,34 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         }
     };
 
+    const [iceConnectionState, setIceConnectionState] = useState<string>('new');
+    const [connectionLogs, setConnectionLogs] = useState<string[]>([]);
+
+    const addLog = (msg: string) => {
+        const log = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        console.log(log);
+        setConnectionLogs(prev => [log, ...prev].slice(0, 50)); // Keep last 50
+    };
+
     useEffect(() => {
         if (!roomId) return;
 
         // Initialize Peer Connection
         const pc = new RTCPeerConnection(ICE_SERVERS);
         peerConnection.current = pc;
+        addLog(`PeerConnection initialized with STUN servers.`);
 
         // Add local tracks
         if (localStream) {
             localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            addLog(`Local tracks added: ${localStream.getTracks().length}`);
+        } else {
+            addLog(`No local stream available yet.`);
         }
 
         // Handle incoming tracks
         pc.ontrack = (event) => {
-            console.log("Received remote track:", event.streams[0]);
+            addLog(`Received remote track: ${event.streams[0].id}`);
             setRemoteStream(event.streams[0]);
             setIsConnected(true);
         };
@@ -144,9 +157,18 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             }
         };
 
+        pc.oniceconnectionstatechange = () => {
+            addLog(`ICE Connection State: ${pc.iceConnectionState}`);
+            setIceConnectionState(pc.iceConnectionState);
+        };
+
+        pc.onconnectionstatechange = () => {
+            addLog(`Peer Connection State: ${pc.connectionState}`);
+        };
+
         // DATA CHANNEL: Handle Incoming Channel (Answerer side)
         pc.ondatachannel = (event) => {
-            console.log("Received Data Channel:", event.channel.label);
+            addLog(`Received Data Channel: ${event.channel.label}`);
             const receiveChannel = event.channel;
             dataChannel.current = receiveChannel;
 
@@ -176,7 +198,6 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             })
             // LISTEN FOR SUPABASE FALLBACK MESSAGES
             .on('broadcast', { event: 'card-declared' }, ({ payload }) => {
-                console.log("Received via Supabase Fallback:", payload.name);
                 setLatestReceivedCard(payload);
             })
             .on('broadcast', { event: 'lp-update' }, ({ payload }) => {
@@ -190,6 +211,7 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             })
             .on('broadcast', { event: 'offer' }, async ({ payload }) => {
                 try {
+                    addLog(`Received OFFER from ${payload.username}`);
                     if (payload.username) setRemoteUsername(payload.username);
                     if (!pc.currentRemoteDescription) {
                         await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
@@ -198,28 +220,32 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                         const answer = await pc.createAnswer();
                         await pc.setLocalDescription(answer);
 
+                        addLog(`Sending ANSWER...`);
                         channel.current?.send({ type: 'broadcast', event: 'answer', payload: { answer, username } });
+                    } else {
+                        addLog(`Ignored OFFER (RemoteDescription already set)`);
                     }
-                } catch (e) { console.error("Error handling offer", e); }
+                } catch (e) { addLog(`Error handling offer: ${e}`); }
             })
             .on('broadcast', { event: 'answer' }, async ({ payload }) => {
                 try {
+                    addLog(`Received ANSWER from ${payload.username}`);
                     if (payload.username) setRemoteUsername(payload.username);
                     if (!pc.currentRemoteDescription) {
                         await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
                         while (iceCandidatesQueue.current.length > 0) await pc.addIceCandidate(iceCandidatesQueue.current.shift()!);
                     }
-                } catch (e) { console.error("Error handling answer", e); }
+                } catch (e) { addLog(`Error handling answer: ${e}`); }
             })
             .on('broadcast', { event: 'ready' }, async ({ payload }) => {
                 const myId = clientId.current;
                 const theirId = payload.clientId;
                 if (payload.username) setRemoteUsername(payload.username);
-                console.log(`[Signaling] Ready received from ${theirId}`);
+                addLog(`[Signaling] READY received from ${theirId} (${payload.username})`);
 
                 // Tie-Breaker Logic
                 if (!pc.currentRemoteDescription && myId < theirId) {
-                    console.log("I am the offerer. Creating Data Channel...");
+                    addLog("I am the OFFERER. Creating Data Channel...");
 
                     const dc = pc.createDataChannel("game-events");
                     dc.onopen = () => setDataChannelState('open');
@@ -238,23 +264,43 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                     try {
                         const offer = await pc.createOffer();
                         await pc.setLocalDescription(offer);
+                        addLog(`Sending OFFER...`);
                         channel.current?.send({ type: 'broadcast', event: 'offer', payload: { offer, username } });
-                    } catch (e) { console.error("Error creating offer", e); }
+                    } catch (e) { addLog(`Error creating offer: ${e}`); }
                 } else if (!pc.currentRemoteDescription && myId > theirId) {
+                    addLog("I am the ANSWERER. Sending READY back just in case.");
                     channel.current?.send({ type: 'broadcast', event: 'ready', payload: { clientId: clientId.current, username } });
                 }
             })
             .subscribe((status) => {
+                addLog(`Supabase Subscription Status: ${status}`);
                 if (status === 'SUBSCRIBED') {
+                    addLog(`Broadcasting I AM READY...`);
                     channel.current?.send({ type: 'broadcast', event: 'ready', payload: { clientId: clientId.current, username } });
                 }
             });
 
         return () => {
+            addLog(`Cleaning up WebRTC...`);
             pc.close();
             supabase.removeChannel(signaling);
         };
     }, [roomId, localStream]);
 
-    return { remoteStream, isConnected, remoteUsername, sendCard, latestReceivedCard, dataChannelState, sendLP, latestReceivedLP, sendPhase, latestReceivedPhase, sendPassTurn, latestReceivePassTurn };
+    return {
+        remoteStream,
+        isConnected,
+        remoteUsername,
+        sendCard,
+        latestReceivedCard,
+        dataChannelState,
+        sendLP,
+        latestReceivedLP,
+        sendPhase,
+        latestReceivedPhase,
+        sendPassTurn,
+        latestReceivePassTurn,
+        iceConnectionState, // Exported
+        connectionLogs      // Exported
+    };
 };
