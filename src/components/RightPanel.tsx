@@ -8,6 +8,7 @@ interface RightPanelProps {
     dataChannelState?: string;
     iceConnectionState?: string;
     connectionLogs?: string[];
+    sendPing?: () => void;
 }
 
 interface CardData {
@@ -29,8 +30,8 @@ interface SearchResult {
     text?: string; // For One Piece
 }
 
-const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard, dataChannelState, iceConnectionState, connectionLogs }) => {
-    const { gameType } = useLayout();
+const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard, dataChannelState, iceConnectionState, connectionLogs, sendPing }) => {
+    const { gameType, currentRoomId } = useLayout();
 
     // DEBUG: Log gameType on mount and changes
     useEffect(() => {
@@ -322,6 +323,15 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
                     <div className="log-view">
                         <div className="debug-log-container" style={{ padding: '10px', fontSize: '11px', fontFamily: 'monospace', color: '#888', height: '100%', overflowY: 'auto' }}>
                             <div style={{ marginBottom: '10px', color: '#FCD34D' }}>DEBUG STATUS</div>
+                            <div style={{ wordBreak: 'break-all', fontSize: '10px', marginBottom: '5px' }}>
+                                Room: <span style={{ color: '#fff' }}>{currentRoomId}</span>
+                            </div>
+                            <button
+                                onClick={sendPing}
+                                style={{ background: '#333', color: 'white', border: '1px solid #555', padding: '2px 6px', fontSize: '10px', cursor: 'pointer', marginBottom: '5px' }}
+                            >
+                                SEND SIGNAL PING
+                            </button>
                             <div>Stream: {remoteStream ? "ACTIVE" : "NO STREAM"}</div>
                             <div>ICE State: {iceConnectionState || "unknown"}</div>
                             <div>DataChannel: {dataChannelState || "CLOSED"}</div>

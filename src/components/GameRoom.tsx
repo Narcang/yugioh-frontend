@@ -31,7 +31,8 @@ const GameRoom: React.FC = () => {
         sendPassTurn,
         latestReceivePassTurn,
         iceConnectionState,
-        connectionLogs
+        connectionLogs,
+        sendPing
     } = useWebRTC(currentRoomId, localStream, username);
 
     const { setCurrentPhase, switchTurn, currentTurn, isTurnChanging } = useLayout();
@@ -77,6 +78,7 @@ const GameRoom: React.FC = () => {
                 dataChannelState={dataChannelState}
                 iceConnectionState={iceConnectionState}
                 connectionLogs={connectionLogs}
+                sendPing={sendPing}
             />
 
             <DiceModal />
