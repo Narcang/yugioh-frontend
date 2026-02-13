@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 
 const Lobby: React.FC = () => {
-    const { setAppView, setCurrentRoomId, setIsSettingsOpen } = useLayout();
+    const { setAppView, setCurrentRoomId, setIsSettingsOpen, setGameType, setCurrentPhase } = useLayout();
     const { user, profile, signOut } = useAuth();
     const [joinCode, setJoinCode] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -67,7 +67,8 @@ const Lobby: React.FC = () => {
                     maxPlayers: r.max_players,
                     isPublic: r.is_public,
                     password: r.password,
-                    hostId: r.host_id
+                    hostId: r.host_id,
+                    gameType: r.settings?.gameType || 'Yugioh' // Fallback for old rooms
                 }));
                 setRooms(mappedRooms);
             }
@@ -106,6 +107,19 @@ const Lobby: React.FC = () => {
             }
         }
 
+        // Set Game Type
+        const gameType = roomToJoin?.gameType || roomToJoin?.settings?.gameType || 'Yugioh';
+        setGameType(gameType);
+
+        let firstPhase = 'Draw Phase';
+        if (gameType === 'Magic') firstPhase = 'Beginning Phase';
+        else if (gameType === 'Pokemon') firstPhase = 'Draw Phase';
+        else if (gameType === 'One Piece') firstPhase = 'Refresh Phase';
+        else if (gameType === 'Dragon Ball') firstPhase = 'Charge Phase';
+        else if (gameType === 'Riftbound') firstPhase = 'Awaken Phase';
+
+        setCurrentPhase(firstPhase);
+
         setCurrentRoomId(targetRoomId);
         setAppView('game');
     };
@@ -128,7 +142,9 @@ const Lobby: React.FC = () => {
                 current_players: 1,
                 max_players: 2,
                 password: data.isPublic ? null : '123', // TODO: Add password field to modal
-                settings: {}
+                settings: {
+                    gameType: data.gameType
+                }
             };
 
             console.log("Attempting to create room with:", newRoom);
@@ -142,6 +158,18 @@ const Lobby: React.FC = () => {
 
             setIsCreateModalOpen(false);
             // Auto Join properly
+            const newGameType = newRoom.settings.gameType;
+            setGameType(newGameType);
+
+            let firstPhase = 'Draw Phase';
+            if (newGameType === 'Magic') firstPhase = 'Beginning Phase';
+            else if (newGameType === 'Pokemon') firstPhase = 'Draw Phase';
+            else if (newGameType === 'One Piece') firstPhase = 'Refresh Phase';
+            else if (newGameType === 'Dragon Ball') firstPhase = 'Charge Phase';
+            else if (newGameType === 'Riftbound') firstPhase = 'Awaken Phase';
+
+            setCurrentPhase(firstPhase);
+
             setCurrentRoomId(createdRoom.id);
             setAppView('game');
 
@@ -210,7 +238,15 @@ const Lobby: React.FC = () => {
                     </div>
 
                     <div style={{ textAlign: 'center' }}>
-                        <h1 className="game-title">Yu-Gi-Oh! Platform</h1>
+                        <img
+                            src="/logo.png"
+                            alt="PlayTCG.Online"
+                            style={{
+                                height: '120px',
+                                width: 'auto',
+                                marginBottom: '20px'
+                            }}
+                        />
                         <p className="game-subtitle">Select your game mode</p>
                     </div>
 
@@ -218,11 +254,26 @@ const Lobby: React.FC = () => {
                         {user ? (
                             <div
                                 className="user-avatar"
-                                style={{ cursor: 'pointer', border: '2px solid #F4C430', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#333' }}
+                                style={{
+                                    cursor: 'pointer',
+                                    border: '2px solid #FFFFFF',
+                                    width: '40px',
+                                    height: '40px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '50%',
+                                    background: '#EF4444',
+                                    color: '#FFFFFF'
+                                }}
                                 onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
                                 title={profile?.username || user.email || 'User'}
                             >
-                                <span style={{ fontWeight: 'bold' }}>{profile?.username?.substring(0, 2).toUpperCase() || user.email?.substring(0, 2).toUpperCase()}</span>
+                                {profile?.avatar_url ? (
+                                    <img src={profile.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                    <span style={{ fontWeight: 'bold' }}>{profile?.username?.substring(0, 2).toUpperCase() || user.email?.substring(0, 2).toUpperCase()}</span>
+                                )}
                             </div>
                         ) : (
                             <button className="primary-btn small" onClick={() => setIsAuthModalOpen(true)}>Accedi</button>
@@ -272,18 +323,60 @@ const Lobby: React.FC = () => {
                     <section className="lobby-section matchmaking">
                         <h2 className="section-heading">Matchmaking</h2>
                         <div className="card-grid">
-                            <div className="lobby-card ranked" onClick={handleJoinGame}>
+                            <div className="lobby-card ranked disabled" style={{ position: 'relative', opacity: 0.7, cursor: 'not-allowed' }}>
                                 <div className="card-icon">🏆</div>
                                 <div className="card-info">
                                     <h3>Ranked Match</h3>
                                     <p>Compete for the top spot on the leaderboard.</p>
                                 </div>
+                                <div style={{
+                                    position: 'absolute',
+                                    top: 0, left: 0, right: 0, bottom: 0,
+                                    background: 'rgba(0,0,0,0.6)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '12px',
+                                    backdropFilter: 'blur(2px)'
+                                }}>
+                                    <span style={{
+                                        color: '#fff',
+                                        fontWeight: '900',
+                                        fontSize: '1.2rem',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '2px',
+                                        border: '2px solid #fff',
+                                        padding: '8px 16px',
+                                        transform: 'rotate(-5deg)'
+                                    }}>Coming Soon</span>
+                                </div>
                             </div>
-                            <div className="lobby-card quick" onClick={handleJoinGame}>
+                            <div className="lobby-card quick disabled" style={{ position: 'relative', opacity: 0.7, cursor: 'not-allowed' }}>
                                 <div className="card-icon">⚡</div>
                                 <div className="card-info">
                                     <h3>Quick Match</h3>
                                     <p>Jump into a casual game instantly.</p>
+                                </div>
+                                <div style={{
+                                    position: 'absolute',
+                                    top: 0, left: 0, right: 0, bottom: 0,
+                                    background: 'rgba(0,0,0,0.6)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '12px',
+                                    backdropFilter: 'blur(2px)'
+                                }}>
+                                    <span style={{
+                                        color: '#fff',
+                                        fontWeight: '900',
+                                        fontSize: '1.2rem',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '2px',
+                                        border: '2px solid #fff',
+                                        padding: '8px 16px',
+                                        transform: 'rotate(-5deg)'
+                                    }}>Coming Soon</span>
                                 </div>
                             </div>
                         </div>
@@ -293,7 +386,12 @@ const Lobby: React.FC = () => {
                     <section className="lobby-section custom-games">
                         <div className="section-header-row">
                             <h2 className="section-heading">Custom Games</h2>
-                            <button className="secondary-btn" onClick={() => setIsCreateModalOpen(true)}>+ Create Room</button>
+                            <button
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="secondary-btn btn-custom-game"
+                            >
+                                + Create Room
+                            </button>
                         </div>
 
                         <div className="join-room-row">
@@ -304,13 +402,18 @@ const Lobby: React.FC = () => {
                                 onChange={(e) => setJoinCode(e.target.value)}
                                 className="lobby-input"
                             />
-                            <button className="primary-btn small" onClick={() => handleJoinGame()}>Join</button>
+                            <button
+                                onClick={() => handleJoinGame()}
+                                className="primary-btn small btn-custom-game"
+                            >
+                                Join
+                            </button>
                         </div>
 
                         <div className="room-list">
                             <div className="room-list-header">
                                 <span style={{ flex: 2.5 }}>Host</span>
-                                <span style={{ flex: 1.5 }}>Format</span>
+                                <span style={{ flex: 1.5 }}>Game & Format</span>
                                 <span style={{ flex: 1 }}>Lang</span>
                                 <span style={{ flex: 1, textAlign: 'center' }}>Players</span>
                                 <span style={{ flex: 1, textAlign: 'right' }}>Action</span>
@@ -335,7 +438,10 @@ const Lobby: React.FC = () => {
                                                 </svg>
                                             )}
                                         </div>
-                                        <span style={{ flex: 1.5, color: '#9CA3AF' }}>{room.format}</span>
+                                        <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{room.gameType}</span>
+                                            <span style={{ color: '#9CA3AF', fontSize: '12px' }}>{room.format}</span>
+                                        </div>
                                         <span style={{ flex: 1, color: '#9CA3AF' }}>{room.language || 'ITA'}</span>
                                         <span style={{ flex: 1, textAlign: 'center', color: isFull ? '#EF4444' : '#10B981' }}>
                                             {room.currentPlayers}/{room.maxPlayers}
@@ -345,6 +451,11 @@ const Lobby: React.FC = () => {
                                                 className={`action-btn ${isFull ? 'disabled' : ''}`}
                                                 onClick={() => handleRoomClick(room)}
                                                 disabled={isFull}
+                                                style={{
+                                                    color: isFull ? '#9CA3AF' : '#FFFFFF',
+                                                    borderColor: isFull ? 'transparent' : '#FFFFFF',
+                                                    background: isFull ? '#4B5563' : 'rgba(255,255,255,0.1)'
+                                                }}
                                             >
                                                 {isFull ? 'Full' : 'Join'}
                                             </button>

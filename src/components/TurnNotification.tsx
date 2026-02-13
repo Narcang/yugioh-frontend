@@ -42,7 +42,7 @@ const TurnNotification: React.FC = () => {
 
     return createPortal(
         <div className="turn-notification-overlay">
-            <div className="yugioh-text">
+            <div className="playtcg-text">
                 IT'S YOUR TURN!
             </div>
             <style jsx>{`
@@ -58,7 +58,7 @@ const TurnNotification: React.FC = () => {
                     justify-content: center;
                     z-index: 9999;
                 }
-                .yugioh-text {
+                .playtcg-text {
                     font-family: 'Times New Roman', serif;
                     font-size: 6rem;
                     font-weight: 900;
@@ -79,7 +79,7 @@ const TurnNotification: React.FC = () => {
                 }
                 
                 /* Helper to create the black outline behind the gradient text */
-                .yugioh-text::before {
+                .playtcg-text::before {
                     content: "IT'S YOUR TURN!";
                     position: absolute;
                     left: 0;
@@ -92,7 +92,7 @@ const TurnNotification: React.FC = () => {
                 }
 
                  /* Inner White highlight for that "shiny" 3D feel */
-                .yugioh-text::after {
+                .playtcg-text::after {
                     content: "IT'S YOUR TURN!";
                     position: absolute;
                     left: 0;

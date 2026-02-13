@@ -15,22 +15,26 @@ interface LayoutContextType {
     appView: 'landing' | 'lobby' | 'game';
     currentRoomId: string | null;
     videoFitMode: 'cover' | 'contain';
+    setVideoFitMode: (mode: 'cover' | 'contain') => void;
     currentTurn: TurnState;
     isTurnChanging: boolean;
+    switchTurn: () => void;
     selfTimeLeft: number;
     opponentTimeLeft: number;
     timeLimit: number;
+    setTimeLimit: (minutes: number) => void;
     setLayoutMode: (mode: LayoutMode) => void;
     setSpotlightTarget: (target: SpotlightTarget) => void;
-    switchTurn: () => void;
     setIsSidebarCollapsed: (collapsed: boolean) => void;
     setIsSettingsOpen: (isOpen: boolean) => void;
     setAutoSwitchSpotlight: (autoSwitch: boolean) => void;
     setIsDiceModalOpen: (isOpen: boolean) => void;
     setAppView: (view: 'landing' | 'lobby' | 'game') => void;
     setCurrentRoomId: (id: string | null) => void;
-    setVideoFitMode: (mode: 'cover' | 'contain') => void;
-    setTimeLimit: (minutes: number) => void;
+    currentPhase: string;
+    setCurrentPhase: (phase: string) => void;
+    gameType: string;
+    setGameType: (type: string) => void;
 }
 
 const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
@@ -55,6 +59,11 @@ export const LayoutProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Initialize split timers (e.g. 40 total -> 20 each)
     const [selfTimeLeft, setSelfTimeLeft] = useState((40 / 2) * 60);
     const [opponentTimeLeft, setOpponentTimeLeft] = useState((40 / 2) * 60);
+
+    // Phase State
+    const [currentPhase, setCurrentPhase] = useState<string>('Draw Phase');
+    const [gameType, setGameType] = useState<string>('Yugioh');
+
 
     // Timer Countdown
     React.useEffect(() => {
@@ -99,6 +108,19 @@ export const LayoutProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         // Actually for "PASS TURN", usually we want a delay. 
         // Let's do: Start Animation -> Change State -> End Animation
 
+        // Reset Phase on Turn Switch
+        // NOTE: We should reset to the first phase of the *current* game type.
+        // For now, hardcode generic or handle in Sidebar/GameRoom where GameType is known?
+        // Actually, we can check gameType here now.
+        let firstPhase = 'Draw Phase';
+        if (gameType === 'Magic') firstPhase = 'Beginning Phase';
+        else if (gameType === 'Pokemon') firstPhase = 'Draw Phase';
+        else if (gameType === 'One Piece') firstPhase = 'Refresh Phase';
+        else if (gameType === 'Dragon Ball') firstPhase = 'Charge Phase';
+        else if (gameType === 'Riftbound') firstPhase = 'Awaken Phase';
+
+        setCurrentPhase(firstPhase);
+
         setTimeout(() => {
             setIsTurnChanging(false);
         }, 2000); // 2s total animation duration
@@ -131,6 +153,10 @@ export const LayoutProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             opponentTimeLeft,
             timeLimit,
             setTimeLimit,
+            currentPhase,
+            setCurrentPhase,
+            gameType,
+            setGameType,
         }}>
             {children}
         </LayoutContext.Provider>

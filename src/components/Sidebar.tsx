@@ -2,10 +2,26 @@
 import React, { useState } from 'react';
 import { useMedia } from '@/context/MediaContext';
 import { useLayout } from '@/context/LayoutContext';
+import { useAuth } from '@/context/AuthContext';
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+    sendPhase: (phase: string) => void;
+    sendPassTurn: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ sendPhase, sendPassTurn }) => {
     const { isMicMuted, isVideoEnabled, toggleMic, toggleVideo } = useMedia();
-    const { layoutMode, spotlightTarget, setLayoutMode, setSpotlightTarget, isSidebarCollapsed, setIsSidebarCollapsed, setIsSettingsOpen, setIsDiceModalOpen, currentRoomId, switchTurn, currentTurn, selfTimeLeft, timeLimit } = useLayout();
+    const { user, profile } = useAuth();
+    const { layoutMode, spotlightTarget, setLayoutMode, setSpotlightTarget, isSidebarCollapsed, setIsSidebarCollapsed, setIsSettingsOpen, setIsDiceModalOpen, currentRoomId, switchTurn, currentTurn, selfTimeLeft, timeLimit, currentPhase, setCurrentPhase, gameType } = useLayout();
+
+    const GAME_PHASES: Record<string, string[]> = {
+        'Yugioh': ['Draw Phase', 'Standby Phase', 'Main Phase 1', 'Battle Phase', 'Main Phase 2', 'End Phase'],
+        'Magic': ['Beginning Phase', 'Main Phase 1', 'Combat Phase', 'Main Phase 2', 'Ending Phase'],
+        'Pokemon': ['Draw Phase', 'Main Phase', 'Attack/End Phase'],
+        'One Piece': ['Refresh Phase', 'Draw Phase', 'DON!! Phase', 'Main Phase', 'End Phase'],
+        'Dragon Ball': ['Charge Phase', 'Main Phase', 'End Phase'],
+        'Riftbound': ['Awaken Phase', 'Beginning Phase', 'Channel Phase', 'Draw Phase', 'Action Phase', 'End Phase']
+    };
 
     const handleSpotlightClick = () => {
         if (layoutMode === 'fullscreen') {
@@ -27,12 +43,66 @@ const Sidebar: React.FC = () => {
 
             </div>
 
+            {/* 0.5 Phase Controller */}
+            <div className="sidebar-group">
+                <button
+                    className="icon-btn"
+                    title={`Fase Corrente: ${currentPhase}. Clicca per avanzare.`}
+                    onClick={() => {
+                        if (currentTurn !== 'self') return;
+
+                        const phases = GAME_PHASES[gameType] || GAME_PHASES['Yugioh'];
+                        const currentIndex = phases.indexOf(currentPhase);
+
+                        let nextPhase = '';
+
+                        if (currentIndex !== -1 && currentIndex < phases.length - 1) {
+                            nextPhase = phases[currentIndex + 1];
+                        } else if (currentIndex === phases.length - 1) {
+                            // If last phase, switch turn
+                            switchTurn();
+                            sendPassTurn();
+                            return;
+                        } else {
+                            // Fallback/Reset if phase not found
+                            nextPhase = phases[0];
+                        }
+
+                        if (nextPhase) {
+                            setCurrentPhase(nextPhase);
+                            sendPhase(nextPhase);
+                        }
+                    }}
+                    style={{
+                        color: currentTurn === 'self' ? '#F59E0B' : '#666', // Amber for phases
+                        cursor: currentTurn === 'self' ? 'pointer' : 'not-allowed',
+                        opacity: currentTurn === 'self' ? 1 : 0.5,
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        width: 'auto',
+                        padding: '0 5px',
+                        minWidth: '40px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        lineHeight: '1.2'
+                    }}
+                >
+                    <span style={{ fontSize: '14px', marginBottom: '2px' }}>▶</span>
+                    <span>{currentPhase.split(' ')[0]}</span>
+                    <span>{currentPhase.split(' ').slice(1).join(' ')}</span>
+                </button>
+            </div>
+
             {/* 1. Passa il turno */}
             <div className="sidebar-group">
                 <button
                     className="icon-btn"
                     title={currentTurn === 'self' ? "Passa il turno" : "È il turno dell'avversario"}
-                    onClick={switchTurn}
+                    onClick={() => {
+                        switchTurn();
+                        sendPassTurn();
+                    }}
                     style={{
                         color: currentTurn === 'self' ? '#3B82F6' : '#666',
                         cursor: currentTurn === 'self' ? 'pointer' : 'not-allowed',
@@ -167,11 +237,15 @@ const Sidebar: React.FC = () => {
 
             {/* User profile at bottom */}
             <div className="sidebar-group">
-                <div className="user-avatar">
-                    <span>AX</span>
+                <div className="user-avatar" title={profile?.username || 'User'}>
+                    {profile?.avatar_url ? (
+                        <img src={profile.avatar_url} alt="User" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                        <span>{profile?.username?.substring(0, 2).toUpperCase() || 'AX'}</span>
+                    )}
                 </div>
             </div>
-        </nav>
+        </nav >
     );
 };
 

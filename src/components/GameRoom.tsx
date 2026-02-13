@@ -5,6 +5,7 @@ import RightPanel from '@/components/RightPanel';
 import GameArea from '@/components/GameArea';
 import DiceModal from '@/components/DiceModal';
 import TurnNotification from '@/components/TurnNotification';
+import PhaseNotification from '@/components/PhaseNotification';
 import { useLayout } from '@/context/LayoutContext';
 import { useMedia } from '@/context/MediaContext';
 import { useAuth } from '@/context/AuthContext';
@@ -17,11 +18,36 @@ const GameRoom: React.FC = () => {
     const { profile, user } = useAuth(); // Get user profile
     const username = profile?.username || user?.email?.split('@')[0] || 'Duelist';
 
-    const { remoteStream, remoteUsername, sendCard, latestReceivedCard, dataChannelState, sendLP, latestReceivedLP } = useWebRTC(currentRoomId, localStream, username);
+    const { remoteStream, remoteUsername, sendCard, latestReceivedCard, dataChannelState, sendLP, latestReceivedLP, sendPhase, latestReceivedPhase, sendPassTurn, latestReceivePassTurn } = useWebRTC(currentRoomId, localStream, username);
+    const { setCurrentPhase, switchTurn, currentTurn, isTurnChanging } = useLayout();
+    const lastProcessedTurnRef = React.useRef<number>(0);
+
+    React.useEffect(() => {
+        // Only update phase from opponent if it's THEIR turn and we aren't switching
+        if (latestReceivedPhase && currentTurn === 'opponent' && !isTurnChanging) {
+            setCurrentPhase(latestReceivedPhase);
+        }
+    }, [latestReceivedPhase, setCurrentPhase, currentTurn, isTurnChanging]);
+
+    React.useEffect(() => {
+        if (latestReceivePassTurn && latestReceivePassTurn > lastProcessedTurnRef.current) {
+            // Opponent passed turn. It is now my turn.
+            if (currentTurn === 'opponent') {
+                switchTurn();
+                lastProcessedTurnRef.current = latestReceivePassTurn;
+
+                // FORCE RESET: Broadcast "Draw Phase" start to ensure opponent sees it too.
+                setTimeout(() => {
+                    sendPhase('Draw Phase');
+                }, 500);
+            }
+        }
+    }, [latestReceivePassTurn, currentTurn, switchTurn, sendPhase]);
+
 
     return (
         <div className="game-room-container" style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-            <Sidebar />
+            <Sidebar sendPhase={sendPhase} sendPassTurn={sendPassTurn} />
             <GameArea
                 remoteStream={remoteStream}
                 opponentName={remoteUsername || 'Opponent'}
@@ -38,6 +64,7 @@ const GameRoom: React.FC = () => {
 
             <DiceModal />
             <TurnNotification />
+            <PhaseNotification />
         </div>
     );
 };

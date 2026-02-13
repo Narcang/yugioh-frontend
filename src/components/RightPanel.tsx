@@ -1,5 +1,5 @@
-"use client";
 import React, { useState, useEffect } from 'react';
+import { useLayout } from '@/context/LayoutContext';
 
 interface RightPanelProps {
     remoteStream?: MediaStream | null;
@@ -15,15 +15,26 @@ interface CardData {
     image_url: string;
     image_url_small: string;
     timestamp: number;
+    // Optional extras for other games
+    gameType?: string;
 }
 
 interface SearchResult {
     id: string; // YGO ID
     name: string;
     image_url: string;
+    oracle_text?: string; // For Magic
+    text?: string; // For One Piece
 }
 
 const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, lastReceivedCard, dataChannelState }) => {
+    const { gameType } = useLayout();
+
+    // DEBUG: Log gameType on mount and changes
+    useEffect(() => {
+        console.log('[RightPanel] Current gameType:', gameType);
+    }, [gameType]);
+
     const [activeTab, setActiveTab] = useState<'cards' | 'log'>('cards');
     const [scannedCards, setScannedCards] = useState<CardData[]>([]);
     const [zoomedCard, setZoomedCard] = useState<CardData | null>(null);
@@ -55,8 +66,15 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
             if (searchQuery.length > 2) {
                 setIsSearching(true);
                 try {
-                    const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
+                    // Include gameType in search
+                    const currentType = gameType || 'Yugioh';
+                    console.log(`[RightPanel] Searching for "${searchQuery}" in game: ${currentType}`);
+
+                    const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}&gameType=${encodeURIComponent(currentType)}`);
                     const data = await res.json();
+
+                    console.log(`[RightPanel] Search results:`, data);
+
                     if (data.results) {
                         setSearchResults(data.results);
                     }
@@ -71,7 +89,7 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
         }, 300);
 
         return () => clearTimeout(delayDebounceFn);
-    }, [searchQuery]);
+    }, [searchQuery, gameType]); // Added gameType to dependencies!
 
     // Handle "Declare" (Clicking a result)
     const handleDeclareCard = async (result: SearchResult) => {
@@ -93,62 +111,107 @@ const RightPanel: React.FC<RightPanelProps> = ({ remoteStream, onDeclareCard, la
         setSearchQuery('');
         setSearchResults([]);
 
-        // 2. Fetch Details (Robust Strategy via ID)
-        let finalCard = { ...newCard };
+        // 2. Fetch Details
+        // Logic branches based on Game Type
+        const currentGameType = gameType || 'Yugioh';
 
-        const fetchDetails = async (lang?: string) => {
-            const langParam = lang ? `&language=${lang}` : '';
-            // Use ID as primary key - much safer than Name for non-English cards
-            // result.id comes from our Python server which gets it from YGOProDeck DB
-            const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${result.id}${langParam}`);
-            if (!res.ok) throw new Error("API Error");
-            return await res.json();
-        };
+        if (currentGameType === 'Pokemon') {
+            // Pokemon cards: the image contains all the information
+            // Just set a simple description
+            const updatedDesc = "Visualizza i dettagli sulla carta.";
 
-        try {
-            let data;
-            // A. Try Italian first
-            try {
-                data = await fetchDetails('it');
-            } catch {
-                console.warn("IT fetch warning, retrying EN...");
+            setScannedCards(prev => prev.map(c =>
+                c.id === tempId ? { ...c, desc: updatedDesc } : c
+            ));
+
+            // Broadcast to opponent
+            if (onDeclareCard) {
+                console.log("Broadcasting Pokemon card:", newCard.name);
+                onDeclareCard({ ...newCard, desc: updatedDesc });
             }
 
-            // B. Fallback to English if Italian failed or didn't return data
-            if (!data || !data.data) {
+        } else if (currentGameType === 'Magic' || currentGameType === 'Magic: The Gathering') {
+            // Magic Logic
+            // The text is already in the search result (passed from Python > route.ts)
+            const magicDesc = result.oracle_text || "Nessun effetto disponibile.";
+
+            setScannedCards(prev => prev.map(c =>
+                c.id === tempId ? { ...c, desc: magicDesc } : c
+            ));
+
+
+            if (onDeclareCard) {
+                console.log("Broadcasting Magic card:", newCard.name);
+                onDeclareCard({ ...newCard, desc: magicDesc });
+            }
+
+        } else if (currentGameType === 'OnePiece' || currentGameType === 'One Piece') {
+            // One Piece Logic
+            const opDesc = result.text || "Nessun effetto disponibile.";
+
+            setScannedCards(prev => prev.map(c =>
+                c.id === tempId ? { ...c, desc: opDesc } : c
+            ));
+
+            if (onDeclareCard) {
+                console.log("Broadcasting One Piece card:", newCard.name);
+                onDeclareCard({ ...newCard, desc: opDesc });
+            }
+
+        } else {
+            // YUGIOH Logic (Existing)
+            const fetchDetails = async (lang?: string) => {
+                const langParam = lang ? `&language=${lang}` : '';
+                const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${result.id}${langParam}`);
+                if (!res.ok) throw new Error("API Error");
+                return await res.json();
+            };
+
+            try {
+                let data;
+                // A. Try Italian first
                 try {
-                    data = await fetchDetails(); // No lang = English
-                } catch (e) {
-                    console.error("EN fetch failed too", e);
+                    data = await fetchDetails('it');
+                } catch {
+                    console.warn("IT fetch warning, retrying EN...");
+                }
+
+                // B. Fallback to English if Italian failed
+                if (!data || !data.data) {
+                    try {
+                        data = await fetchDetails();
+                    } catch (e) {
+                        console.error("EN fetch failed too", e);
+                    }
+                }
+
+                let finalDesc = "Nessun effetto disponibile.";
+                if (data && data.data && data.data.length > 0) {
+                    finalDesc = data.data[0].desc;
+                }
+
+                // Update local state
+                setScannedCards(prev => prev.map(c =>
+                    c.id === tempId ? { ...c, desc: finalDesc } : c
+                ));
+
+                // Broadcast to opponent
+                if (onDeclareCard) {
+                    console.log("Broadcasting YuGiOh card:", newCard.name);
+                    onDeclareCard({ ...newCard, desc: finalDesc });
+                }
+            } catch (e) {
+                console.error("Desc fetch fatal error", e);
+                const errorDesc = "Errore di connessione. Impossibile scaricare l'effetto.";
+
+                setScannedCards(prev => prev.map(c =>
+                    c.id === tempId ? { ...c, desc: errorDesc } : c
+                ));
+
+                if (onDeclareCard) {
+                    onDeclareCard({ ...newCard, desc: errorDesc });
                 }
             }
-
-            if (data && data.data && data.data.length > 0) {
-                finalCard.desc = data.data[0].desc;
-
-                // 3. Update Local State with full details
-                setScannedCards(prev => prev.map(c =>
-                    c.id === tempId ? { ...c, desc: finalCard.desc } : c
-                ));
-            } else {
-                finalCard.desc = "Nessun effetto disponibile.";
-                setScannedCards(prev => prev.map(c =>
-                    c.id === tempId ? { ...c, desc: finalCard.desc } : c
-                ));
-            }
-        } catch (e) {
-            console.error("Desc fetch fatal error", e);
-            finalCard.desc = "Errore di connessione. Impossibile scaricare l'effetto.";
-            // Update UI to show error
-            setScannedCards(prev => prev.map(c =>
-                c.id === tempId ? { ...c, desc: finalCard.desc } : c
-            ));
-        }
-
-        // 4. BROADCAST the FULL card to opponent (After fetch attempt)
-        if (onDeclareCard) {
-            console.log("Broadcasting card:", finalCard.name);
-            onDeclareCard(finalCard);
         }
     };
 

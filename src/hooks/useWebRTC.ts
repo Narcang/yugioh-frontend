@@ -23,6 +23,8 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
 
     const [latestReceivedCard, setLatestReceivedCard] = useState<any | null>(null);
     const [latestReceivedLP, setLatestReceivedLP] = useState<number | null>(null);
+    const [latestReceivedPhase, setLatestReceivedPhase] = useState<string | null>(null);
+    const [latestReceivePassTurn, setLatestReceivePassTurn] = useState<number | null>(null);
 
     const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
 
@@ -74,6 +76,48 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         }
     };
 
+    // PHASE SYNC
+    const sendPhase = (phase: string) => {
+        let sent = false;
+        const payload = JSON.stringify({ type: 'phase-update', data: phase });
+
+        if (dataChannel.current && dataChannel.current.readyState === 'open') {
+            try {
+                dataChannel.current.send(payload);
+                sent = true;
+            } catch (e) { console.error("DC Send Phase error", e); }
+        }
+
+        if (!sent) {
+            channel.current?.send({
+                type: 'broadcast',
+                event: 'phase-update',
+                payload: phase
+            }).catch(err => console.error("Supabase Send Phase error:", err));
+        }
+    };
+
+    // TURN SYNC
+    const sendPassTurn = () => {
+        let sent = false;
+        const payload = JSON.stringify({ type: 'pass-turn', data: Date.now() });
+
+        if (dataChannel.current && dataChannel.current.readyState === 'open') {
+            try {
+                dataChannel.current.send(payload);
+                sent = true;
+            } catch (e) { console.error("DC Send PassTurn error", e); }
+        }
+
+        if (!sent) {
+            channel.current?.send({
+                type: 'broadcast',
+                event: 'pass-turn',
+                payload: Date.now()
+            }).catch(err => console.error("Supabase Send PassTurn error:", err));
+        }
+    };
+
     useEffect(() => {
         if (!roomId) return;
 
@@ -114,6 +158,8 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                     const parsed = JSON.parse(msg.data);
                     if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
                     if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
+                    if (parsed.type === 'phase-update') setLatestReceivedPhase(parsed.data);
+                    if (parsed.type === 'pass-turn') setLatestReceivePassTurn(parsed.data);
                 } catch (e) { }
             };
         };
@@ -135,6 +181,12 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             })
             .on('broadcast', { event: 'lp-update' }, ({ payload }) => {
                 setLatestReceivedLP(payload);
+            })
+            .on('broadcast', { event: 'phase-update' }, ({ payload }) => {
+                setLatestReceivedPhase(payload);
+            })
+            .on('broadcast', { event: 'pass-turn' }, ({ payload }) => {
+                setLatestReceivePassTurn(payload);
             })
             .on('broadcast', { event: 'offer' }, async ({ payload }) => {
                 try {
@@ -177,6 +229,8 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                             const parsed = JSON.parse(msg.data);
                             if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
                             if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
+                            if (parsed.type === 'phase-update') setLatestReceivedPhase(parsed.data);
+                            if (parsed.type === 'pass-turn') setLatestReceivePassTurn(parsed.data);
                         } catch (e) { }
                     };
                     dataChannel.current = dc;
@@ -202,5 +256,5 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         };
     }, [roomId, localStream]);
 
-    return { remoteStream, isConnected, remoteUsername, sendCard, latestReceivedCard, dataChannelState, sendLP, latestReceivedLP };
+    return { remoteStream, isConnected, remoteUsername, sendCard, latestReceivedCard, dataChannelState, sendLP, latestReceivedLP, sendPhase, latestReceivedPhase, sendPassTurn, latestReceivePassTurn };
 };

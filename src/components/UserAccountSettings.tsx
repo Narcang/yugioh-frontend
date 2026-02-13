@@ -15,12 +15,24 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
     // eslint-disable-next-line react-hooks/rules-of-hooks
     const [newUsername, setNewUsername] = useState(profile?.username || '');
     // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [newAvatarUrl, setNewAvatarUrl] = useState(profile?.avatar_url || '');
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const [loading, setLoading] = useState(false);
+
+    const AVATAR_OPTIONS = [
+        'https://api.dicebear.com/9.x/avataaars/svg?seed=Felix',
+        'https://api.dicebear.com/9.x/avataaars/svg?seed=Aneka',
+        'https://api.dicebear.com/9.x/avataaars/svg?seed=Zack',
+        'https://api.dicebear.com/9.x/avataaars/svg?seed=Molly',
+        'https://api.dicebear.com/9.x/avataaars/svg?seed=Bear',
+        'https://api.dicebear.com/9.x/avataaars/svg?seed=Leo',
+    ];
 
     // eslint-disable-next-line react-hooks/rules-of-hooks
     React.useEffect(() => {
-        if (isOpen && profile?.username) {
-            setNewUsername(profile.username);
+        if (isOpen && profile) {
+            setNewUsername(profile.username || '');
+            setNewAvatarUrl(profile.avatar_url || '');
         }
     }, [isOpen, profile]);
 
@@ -35,6 +47,7 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
                 .upsert({
                     id: user.id,
                     username: newUsername,
+                    avatar_url: newAvatarUrl,
                     updated_at: new Date().toISOString(),
                 });
 
@@ -181,15 +194,21 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
                                     width: '100px',
                                     height: '100px',
                                     borderRadius: '50%',
-                                    backgroundColor: '#F4C430', /* Gold/Sand accent */
+                                    backgroundColor: '#EF4444',
+                                    border: '3px solid white',
+                                    overflow: 'hidden',
                                     display: 'flex',
                                     justifyContent: 'center',
                                     alignItems: 'center',
                                     fontSize: '3rem',
                                     fontWeight: 'bold',
-                                    color: '#000'
+                                    color: '#fff'
                                 }}>
-                                    {profile?.username?.substring(0, 2).toUpperCase() || user?.email?.substring(0, 2).toUpperCase()}
+                                    {newAvatarUrl ? (
+                                        <img src={newAvatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        profile?.username?.substring(0, 2).toUpperCase() || user?.email?.substring(0, 2).toUpperCase()
+                                    )}
                                 </div>
                                 <div>
                                     <h3 style={{ fontSize: '1.5rem', margin: '0 0 5px 0' }}>{profile?.username || 'Utente'}</h3>
@@ -202,6 +221,30 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
                                     }}>
                                         #{user?.id.substring(0, 4)}
                                     </span>
+                                </div>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '30px' }}>
+                                <label style={{ display: 'block', marginBottom: '12px', color: '#aaa', fontSize: '0.9rem' }}>SCEGLI AVATAR</label>
+                                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                                    {AVATAR_OPTIONS.map((avatar, index) => (
+                                        <div
+                                            key={index}
+                                            onClick={() => setNewAvatarUrl(avatar)}
+                                            style={{
+                                                width: '60px',
+                                                height: '60px',
+                                                borderRadius: '50%',
+                                                overflow: 'hidden',
+                                                cursor: 'pointer',
+                                                border: newAvatarUrl === avatar ? '3px solid #3B82F6' : '3px solid transparent',
+                                                transition: 'all 0.2s',
+                                                backgroundColor: '#333'
+                                            }}
+                                        >
+                                            <img src={avatar} alt={`Avatar ${index}`} style={{ width: '100%', height: '100%' }} />
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
@@ -224,14 +267,14 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
                                     />
                                     <button
                                         onClick={handleSaveProfile}
-                                        disabled={loading || newUsername === (profile?.username || '')}
+                                        disabled={loading || (newUsername === (profile?.username || '') && newAvatarUrl === (profile?.avatar_url || ''))}
                                         style={{
                                             padding: '12px 24px',
-                                            background: newUsername === (profile?.username || '') ? '#333' : '#F4C430',
-                                            color: newUsername === (profile?.username || '') ? '#888' : '#000',
+                                            background: (newUsername !== (profile?.username || '') || newAvatarUrl !== (profile?.avatar_url || '')) ? '#3B82F6' : '#333',
+                                            color: (newUsername !== (profile?.username || '') || newAvatarUrl !== (profile?.avatar_url || '')) ? '#fff' : '#888',
                                             border: 'none',
                                             borderRadius: '4px',
-                                            cursor: newUsername === (profile?.username || '') ? 'default' : 'pointer',
+                                            cursor: (newUsername !== (profile?.username || '') || newAvatarUrl !== (profile?.avatar_url || '')) ? 'pointer' : 'default',
                                             fontWeight: 'bold',
                                             transition: 'all 0.2s'
                                         }}

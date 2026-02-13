@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLayout } from '@/context/LayoutContext';
 
 interface CreateRoomModalProps {
@@ -10,27 +10,47 @@ interface CreateRoomModalProps {
 
 export interface RoomData {
     name: string;
+    gameType: string;
     format: string;
     description: string;
     isPublic: boolean;
     language: string;
-
 }
+
+const GAME_FORMATS: Record<string, string[]> = {
+    "Yugioh": [
+        "Advanced (TCG)",
+        "Traditional",
+        "GOAT Format",
+        "Edison Format",
+        "Speed Duel",
+        "Rush Duel"
+    ],
+    "Magic": ["Standard", "Modern", "Commander", "Legacy", "Vintage", "Pauper"],
+    "Pokemon": ["Standard", "Expanded", "Unlimited"],
+    "One Piece": ["Standard"],
+    "Dragon Ball": ["Standard"],
+    "Riftbound": ["Standard"]
+};
 
 const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCreate }) => {
     const [name, setName] = useState('');
-    const [format, setFormat] = useState('Advanced');
+    const [gameType, setGameType] = useState('Yugioh');
+    const [format, setFormat] = useState(GAME_FORMATS['Yugioh'][0]);
     const [language, setLanguage] = useState('ITA');
     const [isPublic, setIsPublic] = useState(true);
     const [description, setDescription] = useState('');
 
-
+    // Update format when game type changes
+    useEffect(() => {
+        setFormat(GAME_FORMATS[gameType][0]);
+    }, [gameType]);
 
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onCreate({ name, format, isPublic, description, language });
+        onCreate({ name, gameType, format, isPublic, description, language });
         onClose();
         // Reset form
         setName('');
@@ -60,18 +80,15 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCr
 
                     <div className="form-row" style={{ display: 'flex', gap: '12px' }}>
                         <div className="form-section" style={{ flex: 1 }}>
-                            <label className="input-label">Formato</label>
+                            <label className="input-label">Gioco</label>
                             <select
                                 className="select-input"
-                                value={format}
-                                onChange={(e) => setFormat(e.target.value)}
+                                value={gameType}
+                                onChange={(e) => setGameType(e.target.value)}
                             >
-                                <option value="Advanced">Advanced (TCG)</option>
-                                <option value="Traditional">Traditional</option>
-                                <option value="GOAT">GOAT Format</option>
-                                <option value="Edison">Edison Format</option>
-                                <option value="Speed Duel">Speed Duel</option>
-                                <option value="Rush Duel">Rush Duel</option>
+                                {Object.keys(GAME_FORMATS).map(game => (
+                                    <option key={game} value={game}>{game}</option>
+                                ))}
                             </select>
                         </div>
                         <div className="form-section" style={{ flex: 1 }}>
@@ -90,6 +107,19 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCr
                         </div>
                     </div>
 
+                    <div className="form-section">
+                        <label className="input-label">Formato</label>
+                        <select
+                            className="select-input"
+                            value={format}
+                            onChange={(e) => setFormat(e.target.value)}
+                        >
+                            {GAME_FORMATS[gameType].map(fmt => (
+                                <option key={fmt} value={fmt}>{fmt}</option>
+                            ))}
+                        </select>
+                    </div>
+
                     <div className="form-section checkbox-section">
                         <label className="toggle-switch-container">
                             <span className="input-label" style={{ marginBottom: 0 }}>Partita Pubblica</span>
@@ -106,8 +136,6 @@ const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose, onCr
                             {isPublic ? 'Chiunque può unirsi alla partita.' : 'La partita sarà accessibile solo tramite invito.'}
                         </p>
                     </div>
-
-
 
                     <div className="form-section">
                         <label className="input-label">Descrizione (Facoltativa)</label>
