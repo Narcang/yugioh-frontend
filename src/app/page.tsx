@@ -8,10 +8,13 @@ import SettingsModal from '@/components/SettingsModal';
 import { useSearchParams } from 'next/navigation';
 
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/context/AuthContext';
 
 function RoomUrlHandler() {
-  const { setAppView, setCurrentRoomId, setGameType, setCurrentPhase } = useLayout();
+  const { setAppView, setCurrentRoomId, setGameType, setCurrentPhase, setCurrentTurn } = useLayout();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+
 
   useEffect(() => {
     const roomId = searchParams.get('room');
@@ -20,23 +23,33 @@ function RoomUrlHandler() {
         try {
           const { data: room, error } = await supabase
             .from('rooms')
-            .select('settings')
+            .select('settings, host_id') // Select host_id
             .eq('id', roomId)
             .single();
 
-          if (room && room.settings && room.settings.gameType) {
-            const gameType = room.settings.gameType;
-            setGameType(gameType);
+          if (room) {
+            if (room.settings && room.settings.gameType) {
+              const gameType = room.settings.gameType;
+              setGameType(gameType);
 
-            // Initialize phase based on game type
-            let firstPhase = 'Draw Phase';
-            if (gameType === 'Magic') firstPhase = 'Beginning Phase';
-            else if (gameType === 'Pokemon') firstPhase = 'Draw Phase';
-            else if (gameType === 'One Piece') firstPhase = 'Refresh Phase';
-            else if (gameType === 'Dragon Ball') firstPhase = 'Charge Phase';
-            else if (gameType === 'Riftbound') firstPhase = 'Awaken Phase';
+              // Initialize phase based on game type
+              let firstPhase = 'Draw Phase';
+              if (gameType === 'Magic') firstPhase = 'Beginning Phase';
+              else if (gameType === 'Pokemon') firstPhase = 'Draw Phase';
+              else if (gameType === 'One Piece') firstPhase = 'Refresh Phase';
+              else if (gameType === 'Dragon Ball') firstPhase = 'Charge Phase';
+              else if (gameType === 'Riftbound') firstPhase = 'Awaken Phase';
 
-            setCurrentPhase(firstPhase);
+              setCurrentPhase(firstPhase);
+            }
+
+            // 3. Set Initial Turn
+            // If user is the host, they go first (Self). Otherwise, they are Guest (Opponent turn).
+            if (user && user.id === room.host_id) {
+              setCurrentTurn('self');
+            } else {
+              setCurrentTurn('opponent');
+            }
           }
         } catch (err) {
           console.error("Error fetching room details:", err);
