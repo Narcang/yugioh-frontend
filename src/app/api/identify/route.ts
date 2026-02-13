@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // THE PYTHON SERVER IP
-const PYTHON_API_URL = "http://206.189.50.215:8000/identify";
+const BASE_URL = process.env.PYTHON_API_URL || "http://127.0.0.1:8000";
+const PYTHON_API_URL = `${BASE_URL}/identify`;
 
 export async function POST(req: NextRequest) {
     try {
