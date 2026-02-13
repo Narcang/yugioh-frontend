@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 
 const Lobby: React.FC = () => {
-    const { setAppView, setCurrentRoomId, setIsSettingsOpen, setGameType, setCurrentPhase } = useLayout();
+    const { setAppView, setCurrentRoomId, setIsSettingsOpen, setGameType, setCurrentPhase, setCurrentTurn } = useLayout();
     const { user, profile, signOut } = useAuth();
     const [joinCode, setJoinCode] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -120,6 +120,16 @@ const Lobby: React.FC = () => {
 
         setCurrentPhase(firstPhase);
 
+        // If I am joining and NOT the host, I go second (opponent turn)
+        // If I am re-joining my own room, I assume I'm still P1? 
+        // For simplicity: Joiner = Guest = Opponent Turn. Host = Self Turn.
+        const isHost = user && user.id === roomToJoin?.hostId;
+        if (isHost) {
+            setCurrentTurn('self');
+        } else {
+            setCurrentTurn('opponent');
+        }
+
         setCurrentRoomId(targetRoomId);
         setAppView('game');
     };
@@ -169,6 +179,9 @@ const Lobby: React.FC = () => {
             else if (newGameType === 'Riftbound') firstPhase = 'Awaken Phase';
 
             setCurrentPhase(firstPhase);
+
+            // Creator goes first
+            setCurrentTurn('self');
 
             setCurrentRoomId(createdRoom.id);
             setAppView('game');

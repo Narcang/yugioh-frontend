@@ -17,6 +17,7 @@ interface LayoutContextType {
     videoFitMode: 'cover' | 'contain';
     setVideoFitMode: (mode: 'cover' | 'contain') => void;
     currentTurn: TurnState;
+    setCurrentTurn: (turn: TurnState) => void;
     isTurnChanging: boolean;
     switchTurn: () => void;
     selfTimeLeft: number;
@@ -149,6 +150,7 @@ export const LayoutProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             currentTurn,
             isTurnChanging,
             switchTurn,
+            setCurrentTurn, // Exposed for initialization
             selfTimeLeft,
             opponentTimeLeft,
             timeLimit,
