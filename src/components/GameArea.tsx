@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { useMedia } from '@/context/MediaContext';
 import { useLayout } from '@/context/LayoutContext';
 import PlayerOverlay from './PlayerOverlay';
@@ -25,8 +25,17 @@ const GameArea: React.FC<GameAreaProps> = ({ remoteStream, opponentName = 'Oppon
     }, [localStream, isVideoEnabled]);
 
     useEffect(() => {
-        if (remoteVideoRef.current && remoteStream) {
-            remoteVideoRef.current.srcObject = remoteStream;
+        const el = remoteVideoRef.current;
+        if (!el) return;
+        if (remoteStream) {
+            // Always update srcObject, even if stream object is the same reference
+            if (el.srcObject !== remoteStream) {
+                el.srcObject = remoteStream;
+            }
+            // Explicitly call play() — autoPlay can silently fail in some browsers
+            el.play().catch(e => console.warn('remoteVideo.play() failed:', e));
+        } else {
+            el.srcObject = null;
         }
     }, [remoteStream]);
 
@@ -62,15 +71,17 @@ const GameArea: React.FC<GameAreaProps> = ({ remoteStream, opponentName = 'Oppon
                 onClick={() => handlePlayerClick('opponent')}
                 style={{ cursor: 'pointer' }}
             >
-                {/* Video Feed */}
-                {remoteStream ? (
-                    <video
-                        ref={remoteVideoRef}
-                        autoPlay
-                        playsInline
-                        style={{ width: '100%', height: '100%', objectFit: videoFitMode }}
-                    />
-                ) : (
+                {/* Video Feed — always render video element so srcObject is assigned instantly */}
+                <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    style={{
+                        width: '100%', height: '100%', objectFit: videoFitMode,
+                        display: remoteStream ? 'block' : 'none'
+                    }}
+                />
+                {!remoteStream && (
                     <div className="video-placeholder">
                         <p style={{ color: 'var(--text-muted)' }}>Waiting for {opponentName}...</p>
                         <div style={{ width: '30px', height: '30px', border: '2px solid var(--text-muted)', borderTopColor: 'transparent', borderRadius: '50%', margin: '10px auto', animation: 'spin 1s linear infinite' }}></div>

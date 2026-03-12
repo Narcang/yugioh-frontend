@@ -8,6 +8,9 @@ const ICE_SERVERS = {
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' },
         // Free TURN relay servers (Open Relay) — required for symmetric NAT / mobile networks
         {
             urls: 'turn:openrelay.metered.ca:80',
@@ -23,6 +26,12 @@ const ICE_SERVERS = {
             urls: 'turn:openrelay.metered.ca:443?transport=tcp',
             username: 'openrelayproject',
             credential: 'openrelayproject'
+        },
+        // Backup free TURN — numb.viagenie.ca
+        {
+            urls: 'turn:numb.viagenie.ca',
+            username: 'webrtc@live.com',
+            credential: 'muazkh'
         },
     ]
 };
@@ -65,17 +74,27 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
     // UTILITY: Setup data channel message handler (shared by offerer/answerer)
     // ─────────────────────────────────────────────────────────────────
     const setupDataChannelHandlers = useCallback((dc: RTCDataChannel) => {
+        let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
+
         dc.onopen = () => {
             addLog('DataChannel open');
             setDataChannelState('open');
+            // Send a keepalive ping every 10s to prevent ICE from timing out
+            keepaliveInterval = setInterval(() => {
+                if (dc.readyState === 'open') {
+                    try { dc.send(JSON.stringify({ type: 'ping', data: Date.now() })); } catch (_) { }
+                }
+            }, 10000);
         };
         dc.onclose = () => {
             addLog('DataChannel closed');
             setDataChannelState('closed');
+            if (keepaliveInterval) clearInterval(keepaliveInterval);
         };
         dc.onmessage = (msg) => {
             try {
                 const parsed = JSON.parse(msg.data);
+                if (parsed.type === 'ping') return; // ignore keepalive pings
                 if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
                 if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
                 if (parsed.type === 'phase-update') setLatestReceivedPhase(parsed.data);
@@ -137,6 +156,15 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             if (state === 'failed') {
                 addLog('ICE failed — trying restartIce()');
                 pc.restartIce();
+            }
+            // Also restart on disconnected (recovers faster than waiting for 'failed')
+            if (state === 'disconnected') {
+                addLog('ICE disconnected — scheduling restartIce() in 2s...');
+                setTimeout(() => {
+                    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                        pc.restartIce();
+                    }
+                }, 2000);
             }
         };
 
