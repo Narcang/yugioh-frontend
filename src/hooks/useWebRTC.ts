@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -34,267 +34,275 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
 
     // DEBUG STATE
     const [dataChannelState, setDataChannelState] = useState<string>('closed');
-
-    // NEW SYNCHRONIZATION: Send via Data Channel with Fallback
-    const sendCard = (cardData: any) => {
-        let sent = false;
-        // 1. Try DataChannel
-        if (dataChannel.current && dataChannel.current.readyState === 'open') {
-            console.log("Sending via DataChannel:", cardData.name);
-            const payload = JSON.stringify({ type: 'card-declared', data: cardData });
-            try {
-                dataChannel.current.send(payload);
-                sent = true;
-            } catch (e) { console.error("DC Send error", e); }
-        }
-
-        // 2. Fallback to Supabase Broadcast
-        if (!sent) {
-            console.warn("DataChannel not ready, falling back to Supabase Broadcast...", cardData.name);
-            channel.current?.send({
-                type: 'broadcast',
-                event: 'card-declared',
-                payload: cardData
-            }).catch(err => console.error("Supabase Send error:", err));
-        }
-    };
-
-    // LP SYNC
-    const sendLP = (lp: number) => {
-        let sent = false;
-        const payload = JSON.stringify({ type: 'lp-update', data: lp });
-
-        if (dataChannel.current && dataChannel.current.readyState === 'open') {
-            try {
-                dataChannel.current.send(payload);
-                sent = true;
-            } catch (e) { console.error("DC Send LP error", e); }
-        }
-
-        if (!sent) {
-            channel.current?.send({
-                type: 'broadcast',
-                event: 'lp-update',
-                payload: lp
-            }).catch(err => console.error("Supabase Send LP error:", err));
-        }
-    };
-
-    // PHASE SYNC
-    const sendPhase = (phase: string) => {
-        let sent = false;
-        const payload = JSON.stringify({ type: 'phase-update', data: phase });
-
-        if (dataChannel.current && dataChannel.current.readyState === 'open') {
-            try {
-                dataChannel.current.send(payload);
-                sent = true;
-            } catch (e) { console.error("DC Send Phase error", e); }
-        }
-
-        if (!sent) {
-            channel.current?.send({
-                type: 'broadcast',
-                event: 'phase-update',
-                payload: phase
-            }).catch(err => console.error("Supabase Send Phase error:", err));
-        }
-    };
-
-    // TURN SYNC
-    const sendPassTurn = () => {
-        let sent = false;
-        const payload = JSON.stringify({ type: 'pass-turn', data: Date.now() });
-
-        if (dataChannel.current && dataChannel.current.readyState === 'open') {
-            try {
-                dataChannel.current.send(payload);
-                sent = true;
-            } catch (e) { console.error("DC Send PassTurn error", e); }
-        }
-
-        if (!sent) {
-            channel.current?.send({
-                type: 'broadcast',
-                event: 'pass-turn',
-                payload: Date.now()
-            }).catch(err => console.error("Supabase Send PassTurn error:", err));
-        }
-    };
-
     const [iceConnectionState, setIceConnectionState] = useState<string>('new');
     const [connectionLogs, setConnectionLogs] = useState<string[]>([]);
 
-    const addLog = (msg: string) => {
+    const addLog = useCallback((msg: string) => {
         const log = `[${new Date().toLocaleTimeString()}] ${msg}`;
         console.log(log);
-        setConnectionLogs(prev => [log, ...prev].slice(0, 50)); // Keep last 50
-    };
+        setConnectionLogs(prev => [log, ...prev].slice(0, 50));
+    }, []);
 
+    // ─────────────────────────────────────────────────────────────────
+    // UTILITY: Setup data channel message handler (shared by offerer/answerer)
+    // ─────────────────────────────────────────────────────────────────
+    const setupDataChannelHandlers = useCallback((dc: RTCDataChannel) => {
+        dc.onopen = () => {
+            addLog('DataChannel open');
+            setDataChannelState('open');
+        };
+        dc.onclose = () => {
+            addLog('DataChannel closed');
+            setDataChannelState('closed');
+        };
+        dc.onmessage = (msg) => {
+            try {
+                const parsed = JSON.parse(msg.data);
+                if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
+                if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
+                if (parsed.type === 'phase-update') setLatestReceivedPhase(parsed.data);
+                if (parsed.type === 'pass-turn') setLatestReceivePassTurn(parsed.data);
+            } catch (e) { }
+        };
+    }, [addLog]);
+
+    // ─────────────────────────────────────────────────────────────────
+    // EFFECT 1 — PeerConnection + Supabase Signaling (depends only on roomId)
+    // This runs once per room. It does NOT add local tracks here — see Effect 2.
+    // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
         if (!roomId) return;
 
-        // Initialize Peer Connection
         const pc = new RTCPeerConnection(ICE_SERVERS);
         peerConnection.current = pc;
-        addLog(`PeerConnection initialized with STUN servers.`);
+        iceCandidatesQueue.current = [];
+        addLog('PeerConnection initialized');
 
-        // Add local tracks
-        if (localStream) {
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-            addLog(`Local tracks added: ${localStream.getTracks().length}`);
-        } else {
-            addLog(`No local stream available yet.`);
-        }
-
-        // Handle incoming tracks
+        // Handle incoming tracks from remote peer
         pc.ontrack = (event) => {
-            addLog(`Received remote track: ${event.streams[0].id}`);
+            addLog(`Received remote track: ${event.track.kind} — stream id: ${event.streams[0]?.id}`);
             setRemoteStream(event.streams[0]);
             setIsConnected(true);
         };
 
-        // Handle ICE candidates
+        // Send ICE candidates via Supabase broadcast
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                channel.current?.send({ type: 'broadcast', event: 'ice-candidate', payload: event.candidate });
+                channel.current?.send({
+                    type: 'broadcast',
+                    event: 'ice-candidate',
+                    payload: event.candidate
+                });
             }
         };
 
         pc.oniceconnectionstatechange = () => {
             const state = pc.iceConnectionState;
-            addLog(`ICE Connection State: ${state}`);
+            addLog(`ICE State: ${state}`);
             setIceConnectionState(state);
-
-            if (state === 'failed' || state === 'disconnected') {
-                addLog("ICE connection lost. Consider manual reconnect.");
+            if (state === 'failed') {
+                addLog('ICE failed — trying restartIce()');
+                pc.restartIce();
             }
         };
 
         pc.onconnectionstatechange = () => {
-            addLog(`Peer Connection State: ${pc.connectionState}`);
+            addLog(`Connection State: ${pc.connectionState}`);
+            if (pc.connectionState === 'connected') setIsConnected(true);
+            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') setIsConnected(false);
         };
 
-        // DATA CHANNEL: Handle Incoming Channel (Answerer side)
+        // Answerer receives a data channel created by the offerer
         pc.ondatachannel = (event) => {
-            addLog(`Received Data Channel: ${event.channel.label}`);
-            const receiveChannel = event.channel;
-            dataChannel.current = receiveChannel;
-
-            receiveChannel.onopen = () => setDataChannelState('open');
-            receiveChannel.onclose = () => setDataChannelState('closed');
-
-            receiveChannel.onmessage = (msg) => {
-                try {
-                    const parsed = JSON.parse(msg.data);
-                    if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
-                    if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
-                    if (parsed.type === 'phase-update') setLatestReceivedPhase(parsed.data);
-                    if (parsed.type === 'pass-turn') setLatestReceivePassTurn(parsed.data);
-                } catch (e) { }
-            };
+            addLog(`Received DataChannel: ${event.channel.label}`);
+            dataChannel.current = event.channel;
+            setupDataChannelHandlers(event.channel);
         };
 
-        // Initialize Supabase Signaling
-        const signaling = supabase.channel(`room:${roomId}`);
+        // ── Supabase Signaling ──
+        const signaling = supabase.channel(`webrtc:${roomId}`);
         channel.current = signaling;
 
         signaling
             .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
                 const candidate = new RTCIceCandidate(payload);
-                if (pc.remoteDescription && pc.remoteDescription.type) await pc.addIceCandidate(candidate);
-                else iceCandidatesQueue.current.push(candidate);
+                if (pc.remoteDescription?.type) {
+                    await pc.addIceCandidate(candidate).catch(e => addLog(`addIceCandidate error: ${e}`));
+                } else {
+                    iceCandidatesQueue.current.push(candidate);
+                }
             })
-            // LISTEN FOR SUPABASE FALLBACK MESSAGES
-            .on('broadcast', { event: 'card-declared' }, ({ payload }) => {
-                setLatestReceivedCard(payload);
-            })
-            .on('broadcast', { event: 'lp-update' }, ({ payload }) => {
-                setLatestReceivedLP(payload);
-            })
-            .on('broadcast', { event: 'phase-update' }, ({ payload }) => {
-                setLatestReceivedPhase(payload);
-            })
-            .on('broadcast', { event: 'pass-turn' }, ({ payload }) => {
-                setLatestReceivePassTurn(payload);
-            })
+            // ── Supabase fallback for game state (when DataChannel is not ready) ──
+            .on('broadcast', { event: 'card-declared' }, ({ payload }) => { setLatestReceivedCard(payload); })
+            .on('broadcast', { event: 'lp-update' }, ({ payload }) => { setLatestReceivedLP(payload); })
+            .on('broadcast', { event: 'phase-update' }, ({ payload }) => { setLatestReceivedPhase(payload); })
+            .on('broadcast', { event: 'pass-turn' }, ({ payload }) => { setLatestReceivePassTurn(payload); })
+            // ── Offer/Answer ──
             .on('broadcast', { event: 'offer' }, async ({ payload }) => {
                 try {
                     addLog(`Received OFFER from ${payload.username}`);
                     if (payload.username) setRemoteUsername(payload.username);
-                    if (!pc.currentRemoteDescription) {
-                        await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-                        while (iceCandidatesQueue.current.length > 0) await pc.addIceCandidate(iceCandidatesQueue.current.shift()!);
-
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-
-                        addLog(`Sending ANSWER...`);
-                        channel.current?.send({ type: 'broadcast', event: 'answer', payload: { answer, username } });
-                    } else {
-                        addLog(`Ignored OFFER (RemoteDescription already set)`);
+                    if (pc.currentRemoteDescription) {
+                        addLog('Ignored duplicate OFFER');
+                        return;
                     }
-                } catch (e) { addLog(`Error handling offer: ${e}`); }
+                    await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+                    // Flush queued ICE candidates
+                    while (iceCandidatesQueue.current.length > 0) {
+                        await pc.addIceCandidate(iceCandidatesQueue.current.shift()!);
+                    }
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    addLog('Sending ANSWER...');
+                    channel.current?.send({ type: 'broadcast', event: 'answer', payload: { answer, username } });
+                } catch (e) { addLog(`Error handling OFFER: ${e}`); }
             })
             .on('broadcast', { event: 'answer' }, async ({ payload }) => {
                 try {
                     addLog(`Received ANSWER from ${payload.username}`);
                     if (payload.username) setRemoteUsername(payload.username);
-                    if (!pc.currentRemoteDescription) {
-                        await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
-                        while (iceCandidatesQueue.current.length > 0) await pc.addIceCandidate(iceCandidatesQueue.current.shift()!);
+                    if (pc.currentRemoteDescription) {
+                        addLog('Ignored duplicate ANSWER');
+                        return;
                     }
-                } catch (e) { addLog(`Error handling answer: ${e}`); }
+                    await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+                    while (iceCandidatesQueue.current.length > 0) {
+                        await pc.addIceCandidate(iceCandidatesQueue.current.shift()!);
+                    }
+                } catch (e) { addLog(`Error handling ANSWER: ${e}`); }
             })
             .on('broadcast', { event: 'ready' }, async ({ payload }) => {
                 const myId = clientId.current;
                 const theirId = payload.clientId;
                 if (payload.username) setRemoteUsername(payload.username);
-                addLog(`[Signaling] READY received from ${theirId} (${payload.username})`);
+                addLog(`READY received from ${theirId} (${payload.username})`);
 
-                // Tie-Breaker Logic
+                // Tie-breaker: lexicographically lower ID becomes the Offerer
                 if (!pc.currentRemoteDescription && myId < theirId) {
-                    addLog("I am the OFFERER. Creating Data Channel...");
+                    addLog('I am the OFFERER — creating DataChannel and offer...');
 
-                    const dc = pc.createDataChannel("game-events");
-                    dc.onopen = () => setDataChannelState('open');
-                    dc.onclose = () => setDataChannelState('closed');
-                    dc.onmessage = (msg) => {
-                        try {
-                            const parsed = JSON.parse(msg.data);
-                            if (parsed.type === 'card-declared') setLatestReceivedCard(parsed.data);
-                            if (parsed.type === 'lp-update') setLatestReceivedLP(parsed.data);
-                            if (parsed.type === 'phase-update') setLatestReceivedPhase(parsed.data);
-                            if (parsed.type === 'pass-turn') setLatestReceivePassTurn(parsed.data);
-                        } catch (e) { }
-                    };
+                    const dc = pc.createDataChannel('game-events');
                     dataChannel.current = dc;
+                    setupDataChannelHandlers(dc);
 
                     try {
                         const offer = await pc.createOffer();
                         await pc.setLocalDescription(offer);
-                        addLog(`Sending OFFER...`);
+                        addLog('Sending OFFER...');
                         channel.current?.send({ type: 'broadcast', event: 'offer', payload: { offer, username } });
-                    } catch (e) { addLog(`Error creating offer: ${e}`); }
+                    } catch (e) { addLog(`Error creating OFFER: ${e}`); }
+
                 } else if (!pc.currentRemoteDescription && myId > theirId) {
-                    addLog("I am the ANSWERER. Sending READY back just in case.");
-                    channel.current?.send({ type: 'broadcast', event: 'ready', payload: { clientId: clientId.current, username } });
+                    addLog('I am the ANSWERER — sending READY back just in case');
+                    channel.current?.send({ type: 'broadcast', event: 'ready', payload: { clientId: myId, username } });
                 }
             })
             .subscribe((status) => {
-                addLog(`Supabase Subscription Status: ${status}`);
+                addLog(`Supabase: ${status}`);
                 if (status === 'SUBSCRIBED') {
-                    addLog(`Broadcasting I AM READY...`);
+                    addLog('Broadcasting READY...');
                     channel.current?.send({ type: 'broadcast', event: 'ready', payload: { clientId: clientId.current, username } });
                 }
             });
 
         return () => {
-            addLog(`Cleaning up WebRTC...`);
+            addLog('Cleaning up WebRTC...');
             pc.close();
+            peerConnection.current = null;
             supabase.removeChannel(signaling);
         };
-    }, [roomId, localStream]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [roomId]); // ← ONLY roomId. localStream handled separately below.
+
+    // ─────────────────────────────────────────────────────────────────
+    // EFFECT 2 — Add/Replace tracks when localStream becomes available
+    // This runs independently so a delayed stream still gets added correctly.
+    // ─────────────────────────────────────────────────────────────────
+    useEffect(() => {
+        const pc = peerConnection.current;
+        if (!pc || !localStream) return;
+
+        const existingSenders = pc.getSenders();
+        const newTracks = localStream.getTracks();
+
+        addLog(`LocalStream ready — ${newTracks.length} track(s) to add/replace`);
+
+        newTracks.forEach(track => {
+            const existingSender = existingSenders.find(s => s.track?.kind === track.kind);
+            if (existingSender) {
+                // Re-negotiation: replace existing track (no new offer needed for same kind)
+                addLog(`Replacing existing ${track.kind} track`);
+                existingSender.replaceTrack(track).catch(e => addLog(`replaceTrack error: ${e}`));
+            } else {
+                // First time: add track and trigger negotiation
+                addLog(`Adding new ${track.kind} track`);
+                pc.addTrack(track, localStream);
+            }
+        });
+    }, [localStream, addLog]);
+
+    // ─────────────────────────────────────────────────────────────────
+    // GAME STATE SYNC — Data Channel with Supabase fallback
+    // ─────────────────────────────────────────────────────────────────
+    const sendViaChannel = useCallback((payload: string, supabaseEvent: string, supabasePayload: unknown) => {
+        if (dataChannel.current?.readyState === 'open') {
+            try {
+                dataChannel.current.send(payload);
+                return;
+            } catch (e) { console.error('DC send error', e); }
+        }
+        // Fallback to Supabase broadcast
+        channel.current?.send({ type: 'broadcast', event: supabaseEvent, payload: supabasePayload })
+            .catch(e => console.error(`Supabase send error (${supabaseEvent}):`, e));
+    }, []);
+
+    const sendCard = useCallback((cardData: any) => {
+        sendViaChannel(
+            JSON.stringify({ type: 'card-declared', data: cardData }),
+            'card-declared',
+            cardData
+        );
+    }, [sendViaChannel]);
+
+    const sendLP = useCallback((lp: number) => {
+        sendViaChannel(
+            JSON.stringify({ type: 'lp-update', data: lp }),
+            'lp-update',
+            lp
+        );
+    }, [sendViaChannel]);
+
+    const sendPhase = useCallback((phase: string) => {
+        sendViaChannel(
+            JSON.stringify({ type: 'phase-update', data: phase }),
+            'phase-update',
+            phase
+        );
+    }, [sendViaChannel]);
+
+    const sendPassTurn = useCallback(() => {
+        sendViaChannel(
+            JSON.stringify({ type: 'pass-turn', data: Date.now() }),
+            'pass-turn',
+            Date.now()
+        );
+    }, [sendViaChannel]);
+
+    // ─────────────────────────────────────────────────────────────────
+    // PING / RECONNECT utilities (referenced by GameRoom.tsx)
+    // ─────────────────────────────────────────────────────────────────
+    const sendPing = useCallback(() => {
+        if (dataChannel.current?.readyState === 'open') {
+            dataChannel.current.send(JSON.stringify({ type: 'ping', data: Date.now() }));
+        }
+    }, []);
+
+    const reconnect = useCallback(() => {
+        const pc = peerConnection.current;
+        if (!pc) return;
+        addLog('Manual reconnect: restarting ICE...');
+        pc.restartIce();
+    }, [addLog]);
 
     return {
         remoteStream,
@@ -309,7 +317,9 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         latestReceivedPhase,
         sendPassTurn,
         latestReceivePassTurn,
-        iceConnectionState, // Exported
-        connectionLogs      // Exported
+        iceConnectionState,
+        connectionLogs,
+        sendPing,
+        reconnect,
     };
 };
