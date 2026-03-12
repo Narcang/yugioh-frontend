@@ -8,9 +8,22 @@ const ICE_SERVERS = {
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' }
+        // Free TURN relay servers (Open Relay) — required for symmetric NAT / mobile networks
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
     ]
 };
 
@@ -21,6 +34,11 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
     const channel = useRef<RealtimeChannel | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const clientId = useRef(Math.random().toString(36).substring(7));
+
+    // Track whether we're subscribed to Supabase (so we don't send signals too early)
+    const isSubscribed = useRef(false);
+    // Track whether we are the offerer (lower clientId wins the tie-breaker)
+    const isOfferer = useRef(false);
 
     // DATA CHANNEL REFS
     const dataChannel = useRef<RTCDataChannel | null>(null);
@@ -67,8 +85,22 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
     }, [addLog]);
 
     // ─────────────────────────────────────────────────────────────────
+    // UTILITY: createAndSendOffer — called both on negotiationneeded and on ready
+    // ─────────────────────────────────────────────────────────────────
+    const createAndSendOffer = useCallback(async (pc: RTCPeerConnection) => {
+        try {
+            addLog('Creating offer...');
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            addLog('Sending OFFER...');
+            channel.current?.send({ type: 'broadcast', event: 'offer', payload: { offer, username } });
+        } catch (e) {
+            addLog(`Error creating OFFER: ${e}`);
+        }
+    }, [addLog, username]);
+
+    // ─────────────────────────────────────────────────────────────────
     // EFFECT 1 — PeerConnection + Supabase Signaling (depends only on roomId)
-    // This runs once per room. It does NOT add local tracks here — see Effect 2.
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
         if (!roomId) return;
@@ -76,6 +108,8 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
         const pc = new RTCPeerConnection(ICE_SERVERS);
         peerConnection.current = pc;
         iceCandidatesQueue.current = [];
+        isSubscribed.current = false;
+        isOfferer.current = false;
         addLog('PeerConnection initialized');
 
         // Handle incoming tracks from remote peer
@@ -112,6 +146,18 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') setIsConnected(false);
         };
 
+        // ── KEY FIX: Handle onnegotiationneeded ──
+        // This fires when addTrack() is called. We create a new offer automatically.
+        // Only the offerer side initiates renegotiation to avoid collisions.
+        pc.onnegotiationneeded = async () => {
+            if (!isOfferer.current || !isSubscribed.current) {
+                addLog(`negotiationneeded skipped (offerer=${isOfferer.current}, subscribed=${isSubscribed.current})`);
+                return;
+            }
+            addLog('negotiationneeded — re-creating offer with tracks...');
+            await createAndSendOffer(pc);
+        };
+
         // Answerer receives a data channel created by the offerer
         pc.ondatachannel = (event) => {
             addLog(`Received DataChannel: ${event.channel.label}`);
@@ -142,8 +188,8 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                 try {
                     addLog(`Received OFFER from ${payload.username}`);
                     if (payload.username) setRemoteUsername(payload.username);
-                    if (pc.currentRemoteDescription) {
-                        addLog('Ignored duplicate OFFER');
+                    if (pc.signalingState !== 'stable' || pc.currentRemoteDescription) {
+                        addLog('Ignored duplicate OFFER (already have remote desc or not stable)');
                         return;
                     }
                     await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
@@ -178,21 +224,26 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                 addLog(`READY received from ${theirId} (${payload.username})`);
 
                 // Tie-breaker: lexicographically lower ID becomes the Offerer
-                if (!pc.currentRemoteDescription && myId < theirId) {
-                    addLog('I am the OFFERER — creating DataChannel and offer...');
+                if (myId < theirId) {
+                    isOfferer.current = true;
+                    addLog('I am the OFFERER — creating DataChannel...');
 
-                    const dc = pc.createDataChannel('game-events');
-                    dataChannel.current = dc;
-                    setupDataChannelHandlers(dc);
+                    // Only create DataChannel if not already existing
+                    if (!dataChannel.current) {
+                        const dc = pc.createDataChannel('game-events');
+                        dataChannel.current = dc;
+                        setupDataChannelHandlers(dc);
+                    }
 
-                    try {
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        addLog('Sending OFFER...');
-                        channel.current?.send({ type: 'broadcast', event: 'offer', payload: { offer, username } });
-                    } catch (e) { addLog(`Error creating OFFER: ${e}`); }
+                    // ── KEY FIX: Add local tracks FIRST (if available), then negotiate ──
+                    // onnegotiationneeded will fire automatically after addTrack,
+                    // but we trigger manually here in case tracks were already added
+                    // (onnegotiationneeded may have fired before isOfferer was set)
+                    addLog('Triggering offer creation (post-ready)...');
+                    await createAndSendOffer(pc);
 
-                } else if (!pc.currentRemoteDescription && myId > theirId) {
+                } else if (myId > theirId) {
+                    isOfferer.current = false;
                     addLog('I am the ANSWERER — sending READY back just in case');
                     channel.current?.send({ type: 'broadcast', event: 'ready', payload: { clientId: myId, username } });
                 }
@@ -200,6 +251,7 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
             .subscribe((status) => {
                 addLog(`Supabase: ${status}`);
                 if (status === 'SUBSCRIBED') {
+                    isSubscribed.current = true;
                     addLog('Broadcasting READY...');
                     channel.current?.send({ type: 'broadcast', event: 'ready', payload: { clientId: clientId.current, username } });
                 }
@@ -207,8 +259,11 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
 
         return () => {
             addLog('Cleaning up WebRTC...');
+            isSubscribed.current = false;
+            isOfferer.current = false;
             pc.close();
             peerConnection.current = null;
+            dataChannel.current = null;
             supabase.removeChannel(signaling);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -217,6 +272,7 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
     // ─────────────────────────────────────────────────────────────────
     // EFFECT 2 — Add/Replace tracks when localStream becomes available
     // This runs independently so a delayed stream still gets added correctly.
+    // onnegotiationneeded will fire automatically after addTrack() if we are the offerer.
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
         const pc = peerConnection.current;
@@ -234,7 +290,7 @@ export const useWebRTC = (roomId: string | null, localStream: MediaStream | null
                 addLog(`Replacing existing ${track.kind} track`);
                 existingSender.replaceTrack(track).catch(e => addLog(`replaceTrack error: ${e}`));
             } else {
-                // First time: add track and trigger negotiation
+                // First time: add track — triggers onnegotiationneeded on the offerer side
                 addLog(`Adding new ${track.kind} track`);
                 pc.addTrack(track, localStream);
             }
