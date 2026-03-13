@@ -20,13 +20,24 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
     const [loading, setLoading] = useState(false);
 
     const AVATAR_OPTIONS = [
-        'https://api.dicebear.com/9.x/avataaars/svg?seed=Felix',
-        'https://api.dicebear.com/9.x/avataaars/svg?seed=Aneka',
-        'https://api.dicebear.com/9.x/avataaars/svg?seed=Zack',
-        'https://api.dicebear.com/9.x/avataaars/svg?seed=Molly',
-        'https://api.dicebear.com/9.x/avataaars/svg?seed=Bear',
-        'https://api.dicebear.com/9.x/avataaars/svg?seed=Leo',
-    ];
+        "Profile_BasePic_0500.webp", "Profile_BasePic_0501.webp", "Profile_BasePic_0503.webp",
+        "Profile_BasePic_0504.webp", "Profile_BasePic_0505.webp", "Profile_BasePic_0506.webp",
+        "Profile_BasePic_0507.webp", "Profile_BasePic_0508.webp", "Profile_BasePic_0509.webp",
+        "Profile_BasePic_0510.webp", "Profile_BasePic_0511.webp", "Profile_BasePic_0512.webp",
+        "Profile_BasePic_0513.webp", "Profile_BasePic_0514.webp", "Profile_BasePic_0515.webp",
+        "Profile_BasePic_0516.webp", "Profile_BasePic_0517.webp", "Profile_BasePic_0518.webp",
+        "Profile_BasePic_0519.webp", "Profile_BasePic_0520.webp", "Profile_BasePic_0521.webp",
+        "Profile_BasePic_0522.webp", "Profile_BasePic_0523.webp", "Profile_BasePic_0524.webp",
+        "Profile_BasePic_0525.webp", "Profile_BasePic_0526.webp", "Profile_BasePic_0527.webp",
+        "Profile_BasePic_0528.webp", "Profile_BasePic_0529.webp", "Profile_BasePic_0530.webp",
+        "Profile_BasePic_0531.webp", "Profile_BasePic_0532.webp", "Profile_BasePic_0533.webp",
+        "Profile_BasePic_0534.webp", "Profile_BasePic_0535.webp", "Profile_BasePic_0536.webp",
+        "Profile_BasePic_0537.webp", "Profile_BasePic_0538.webp", "Profile_BasePic_0539.webp",
+        "Profile_BasePic_0540.webp", "Profile_BasePic_0541.webp", "Profile_BasePic_0542.webp",
+        "Profile_BasePic_0543.webp", "Profile_BasePic_0544.webp", "Profile_BasePic_0545.webp",
+        "Profile_BasePic_0546.webp", "Profile_BasePic_0547.webp", "Profile_BasePic_0548.webp",
+        "Profile_BasePic_0549.webp", "Profile_BasePic_0550.webp"
+    ].map(name => `/avatars/${name}`);
 
     // eslint-disable-next-line react-hooks/rules-of-hooks
     React.useEffect(() => {
@@ -226,7 +237,7 @@ const UserAccountSettings: React.FC<UserAccountSettingsProps> = ({ isOpen, onClo
 
                             <div className="form-group" style={{ marginBottom: '30px' }}>
                                 <label style={{ display: 'block', marginBottom: '12px', color: '#aaa', fontSize: '0.9rem' }}>SCEGLI AVATAR</label>
-                                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', maxHeight: '200px', overflowY: 'auto', padding: '5px 0' }}>
                                     {AVATAR_OPTIONS.map((avatar, index) => (
                                         <div
                                             key={index}
