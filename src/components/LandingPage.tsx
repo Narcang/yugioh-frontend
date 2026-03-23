@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useLayout } from '@/context/LayoutContext';
 import { useAuth } from '@/context/AuthContext';
 import AuthModal from './AuthModal';
+import Footer from './Footer';
 
 const LandingPage: React.FC = () => {
     const { setAppView } = useLayout();
@@ -92,6 +93,7 @@ const LandingPage: React.FC = () => {
             </div>
 
             <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+            <Footer />
         </div>
     );
 };
