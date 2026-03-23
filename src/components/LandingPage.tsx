@@ -18,13 +18,14 @@ const LandingPage: React.FC = () => {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            height: '100vh',
+            justifyContent: 'space-between',
+            minHeight: '100vh',
             width: '100vw',
             background: '#000000',
             color: '#FFFFFF',
             textAlign: 'center'
         }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
             <div style={{ marginBottom: '2rem' }}>
                 {/* User must place logo.png in public folder */}
                 <img
@@ -92,7 +93,8 @@ const LandingPage: React.FC = () => {
                 )}
             </div>
 
-            <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+                <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+            </div>
             <Footer />
         </div>
     );
